@@ -2,9 +2,11 @@
 
 A social discovery app for watching videos, finding inspiration, saving collections, and connecting with creators. Built with Next.js, React, TypeScript, and Supabase. Designed for desktop and mobile.
 
+[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/git/external?repository-url=https%3A%2F%2Fgithub.com%2FTurboTwitch0%2FTurboWatch)
+
 ## Run locally
 
-Requires Node.js 20.9 or later and npm.
+Requires Node.js 24 and npm.
 
 ```sh
 npm ci
@@ -34,11 +36,16 @@ The schema's Realtime publication includes public posts/comments and participant
 
 ## Deploy to Vercel
 
-The repository is ready for Vercel's automatic Next.js detection. No custom build settings are needed.
+Click [Deploy to Vercel](https://vercel.com/new/git/external?repository-url=https%3A%2F%2Fgithub.com%2FTurboTwitch0%2FTurboWatch) to import this GitHub repository into your Vercel account. If Vercel asks for GitHub access, allow access to `TurboTwitch0/TurboWatch`.
 
-1. Commit this project to your GitHub repository and import it in Vercel. Choose the directory containing `package.json` as the Root Directory.
-2. To deploy demo mode, leave the Supabase variables unset. For a real community, apply the schema and configure both public Supabase variables in Vercel for the intended environment **before building**.
-3. Deploy, then set Supabase's Site URL to the resulting HTTPS domain. Rebuild/redeploy after changing a `NEXT_PUBLIC_` variable.
+1. Import `TurboTwitch0/TurboWatch` from branch `main`. Keep the Root Directory at the repository root (`./`), choose **Next.js**, and use **Node.js 24.x**. Do not set the Root Directory to `TurboWatch`; that folder name belongs to the cloud workspace, not the repository.
+2. Leave the Supabase variables unset to deploy the interactive demo immediately. No database or secret is required for demo mode.
+3. Click **Deploy**. `vercel.json` supplies the install command (`npm ci`) and build command (`npm run build`). Leave the Output Directory at the Next.js default; do not set it to `public` or `out`.
+4. Open the HTTPS URL Vercel provides. Try a video, save a post, and reload to check browser-local persistence. Your website is public once Vercel reports the deployment is ready.
+
+For real accounts and shared posts/messages, follow **Enable the shared community** above, configure both Supabase public variables in Vercel **before building**, and set Supabase's Site URL and allowed redirects to your deployed HTTPS origin. Rebuild/redeploy after changing a `NEXT_PUBLIC_` variable. Demo mode does not send messages to real people or share new posts across devices.
+
+Future pushes to `main` deploy automatically after this repository is linked to Vercel. If the direct import link does not preselect the repository, open [Vercel New Project](https://vercel.com/new), find `TurboTwitch0/TurboWatch`, and choose **Import**.
 
 You can also deploy with Vercel CLI from this directory using your own authenticated Vercel session: `npx vercel`. No Vercel project, account, or production domain has been linked by this implementation.
 
