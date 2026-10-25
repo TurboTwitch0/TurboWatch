@@ -344,4 +344,8 @@ begin
 end;
 $$;
 
+-- PostgreSQL delivers this notification only after the transaction commits.
+-- Refresh PostgREST's table/function cache after a successful schema install.
+notify pgrst, 'reload schema';
+
 commit;

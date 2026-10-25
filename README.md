@@ -34,6 +34,34 @@ Demo uploads allow files up to 2 MB, subject to the browser's storage quota. Lar
 
 The schema's Realtime publication includes public posts/comments and participant-filtered messages. Collections and saved state refresh after each mutation. A network or schema failure displays an error; the app does not silently switch a live community to demo mode.
 
+### Fix `PGRST205`: `public.profiles` missing from the schema cache
+
+This error means the Supabase Data API cannot resolve the table in its schema cache. The schema may be missing, installed in a different project, or awaiting a cache refresh.
+
+1. Open the Supabase project whose **Project URL** matches the `NEXT_PUBLIC_SUPABASE_URL` already configured for your Vercel app. The public key must come from that same project.
+2. In that project's **SQL Editor**, create a new query, paste the **complete** [supabase/schema.sql](supabase/schema.sql), and run it. Include the full transaction through `COMMIT`; creating only `profiles` leaves the other tables, authentication trigger, policies, and collection functions missing. The script is safe to rerun. Resolve any SQL error before continuing; a failed transaction does not install the schema.
+3. Run this verification query in the same SQL Editor. Every row must show `present = true`:
+
+   ```sql
+   select table_name,
+     to_regclass('public.' || table_name) is not null as present
+   from (values
+     ('profiles'), ('posts'), ('post_likes'), ('reposts'), ('saved_posts'),
+     ('comments'), ('follows'), ('boards'), ('board_posts'), ('messages'),
+     ('message_reads')
+   ) as required(table_name);
+   ```
+
+4. If all tables exist and the same error persists, ensure `public` is included in the project's Data API **exposed schemas**, then run:
+
+   ```sql
+   notify pgrst, 'reload schema';
+   ```
+
+   The full schema script also requests this reload after its transaction succeeds. Allow a moment for the API cache to refresh, then retry the existing app page.
+
+Applying the database schema or refreshing its API cache takes effect without a Vercel redeployment. Changing a `NEXT_PUBLIC_` URL or key requires a new app build because Next.js embeds those values at build time. Never paste database passwords or service-role keys into the app or a support message.
+
 ## Deploy to Vercel
 
 Click [Deploy to Vercel](https://vercel.com/new/git/external?repository-url=https%3A%2F%2Fgithub.com%2FTurboTwitch0%2FTurboWatch) to import this GitHub repository into your Vercel account. If Vercel asks for GitHub access, allow access to `TurboTwitch0/TurboWatch`.

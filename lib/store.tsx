@@ -222,7 +222,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       userId ? db.from('message_reads').select('peer_id,read_at').eq('user_id', userId) : Promise.resolve({ data: [], error: null }),
     ]);
     const failure = [profiles, posts, likes, comments, follows, reposts, saved, boards, boardPosts, messages, reads].find((result) => result.error)?.error;
-    if (failure) throw new Error(`Could not load your community: ${failure.message}. Verify that the Supabase schema has been applied.`);
+    if (failure) {
+      if (failure.code === 'PGRST205' || failure.code === '42P01') {
+        throw new Error('Community database setup is incomplete. The site owner needs to create or refresh the schema using the setup instructions below, then try again.');
+      }
+      throw new Error(`Could not load your community: ${failure.message}`);
+    }
     if (generation !== refreshGeneration.current || userId !== liveUserId.current) return;
     const creators: Creator[] = (profiles.data ?? []).map((row: ProfileRow) => profileFromRow(row, (follows.data ?? []).filter((follow) => follow.following_id === row.id).length));
     replaceState({
