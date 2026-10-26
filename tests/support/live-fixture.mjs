@@ -20,7 +20,7 @@ function jwt(user) {
 }
 
 function authUser(user) {
-  return { id: user.id, email: user.email, aud: 'authenticated', role: 'authenticated', app_metadata: { provider: 'email', providers: ['email'] }, user_metadata: { name: user.name }, identities: [], created_at: '2026-10-25T12:00:00.000Z', email_confirmed_at: '2026-10-25T12:00:00.000Z' };
+  return { id: user.id, email: user.email, aud: 'authenticated', role: 'authenticated', app_metadata: { provider: 'email', providers: ['email'] }, user_metadata: { name: user.name }, identities: [], created_at: '2026-10-25T12:00:00.000Z', ...(user.confirmed === false ? {} : { email_confirmed_at: '2026-10-25T12:00:00.000Z' }) };
 }
 
 function session(user) {
@@ -28,18 +28,21 @@ function session(user) {
 }
 
 export async function startSupabaseFixture({ port = 4400, appOrigin = 'http://127.0.0.1:3002' } = {}) {
+  const users = Object.values(fixtureUsers).map(user => ({ ...user, password: fixturePassword, confirmed: true }));
+  let requireEmailConfirmation = false;
+  let rejectNextResend = false;
   /** @type {Record<string, Array<Record<string, unknown>>>} */
   const tables = {
     profiles: Object.values(fixtureUsers).map(user => ({ id: user.id, name: user.name, username: user.username, avatar: `${appOrigin}/media/avatar-${user === fixtureUsers.alice ? 'alex' : 'theo'}.svg`, bio: 'A controlled local integration-test account.', verified: false, cover: '', created_at: '2026-10-25T12:00:00.000Z' })),
-    posts: [{ id: fixturePostId, creator_id: fixtureUsers.bob.id, title: 'A shared coastline', description: 'A video post shared between two separate browser accounts.', media_type: 'video', media_url: `${appOrigin}/media/coast.mp4`, thumbnail: `${appOrigin}/media/coast.jpg`, category: 'Travel', tags: ['fixture', 'shared'], aspect: 'landscape', duration: '0:37', views: 0, created_at: '2026-10-25T12:00:00.000Z' }],
+    posts: [{ id: fixturePostId, creator_id: fixtureUsers.bob.id, title: 'A shared coastline', description: 'A video post shared between two separate browser accounts.', media_type: 'video', media_url: `${appOrigin}/media/coast.mp4`, thumbnail: `${appOrigin}/media/coast.jpg`, category: 'Travel', tags: ['fixture', 'shared', 'sharedcoast'], aspect: 'landscape', duration: '0:37', views: 0, created_at: '2026-10-25T12:00:00.000Z' }],
     post_likes: [], comments: [], follows: [], reposts: [], saved_posts: [], boards: [], board_posts: [], messages: [], message_reads: [],
   };
   const requests = [];
   let realtimeRefusals = 0;
-  const knownUser = id => Object.values(fixtureUsers).find(user => user.id === id);
+  const knownUser = id => users.find(user => user.id === id);
   const userForRequest = request => {
     const token = String(request.headers.authorization || '').replace(/^Bearer /i, '');
-    return Object.values(fixtureUsers).find(user => token === jwt(user)) || (() => {
+    return users.find(user => token === jwt(user)) || (() => {
       try { return knownUser(JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).sub); } catch { return undefined; }
     })();
   };
@@ -97,15 +100,31 @@ export async function startSupabaseFixture({ port = 4400, appOrigin = 'http://12
       for await (const chunk of request) chunks.push(chunk);
       const text = Buffer.concat(chunks).toString();
       const body = text ? JSON.parse(text) : {};
+      if (url.pathname === '/auth/v1/signup') {
+        const email = String(body.email || '').trim().toLowerCase();
+        const name = String(body.data?.name || body.data?.full_name || '').trim();
+        if (!name || !email.includes('@') || String(body.password || '').length < 8) { reply(422, { code: 'validation_failed', msg: 'Enter your name, email, and a password of at least eight characters.' }); return; }
+        if (users.some(value => value.email === email)) { reply(422, { code: 'user_already_exists', msg: 'User already registered' }); return; }
+        const candidate = { id: randomUUID(), email, name, username: `${name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'creator'}_${randomUUID().slice(0, 8)}`, password: body.password, confirmed: !requireEmailConfirmation };
+        users.push(candidate);
+        tables.profiles.push({ id: candidate.id, name: candidate.name, username: candidate.username, avatar: '', bio: '', verified: false, cover: '', created_at: new Date().toISOString() });
+        reply(200, candidate.confirmed ? session(candidate) : authUser(candidate)); return;
+      }
       if (url.pathname === '/auth/v1/token') {
         const candidate = url.searchParams.get('grant_type') === 'refresh_token'
-          ? Object.values(fixtureUsers).find(value => body.refresh_token === `fixture-refresh-${value.id}`)
-          : Object.values(fixtureUsers).find(value => value.email === body.email && body.password === fixturePassword);
-        if (!candidate) { reply(400, { error: 'invalid_grant', error_description: 'Invalid test login.', msg: 'Invalid test login.' }); return; }
+          ? users.find(value => body.refresh_token === `fixture-refresh-${value.id}`)
+          : users.find(value => value.email === String(body.email).trim().toLowerCase() && body.password === value.password);
+        if (!candidate) { reply(400, { error: 'invalid_grant', error_description: 'Invalid login credentials', msg: 'Invalid login credentials', code: 'invalid_credentials' }); return; }
+        if (!candidate.confirmed) { reply(400, { code: 'email_not_confirmed', msg: 'Email not confirmed' }); return; }
         reply(200, session(candidate)); return;
       }
       if (url.pathname === '/auth/v1/user') { reply(user ? 200 : 401, user ? authUser(user) : { message: 'No fixture session.' }); return; }
       if (url.pathname === '/auth/v1/logout') { reply(204); return; }
+      if (url.pathname === '/auth/v1/resend') {
+        if (rejectNextResend) { rejectNextResend = false; reply(429, { code: 'over_email_send_rate_limit', msg: 'Please wait before requesting another confirmation email.' }); return; }
+        if (body.type !== 'signup' || !String(body.email || '').includes('@')) { reply(422, { msg: 'Enter an account email address.' }); return; }
+        reply(200, {}); return;
+      }
       if (url.pathname.startsWith('/rest/v1/rpc/')) {
         if (!user) { reply(401, { message: 'Sign in first.' }); return; }
         const rpc = url.pathname.split('/').at(-1);
@@ -166,6 +185,9 @@ export async function startSupabaseFixture({ port = 4400, appOrigin = 'http://12
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   return {
     url: `http://127.0.0.1:${port}`, tables, requests,
+    setSignupConfirmationRequired(required) { requireEmailConfirmation = required; },
+    rejectNextConfirmationResend() { rejectNextResend = true; },
+    confirmAccount(email) { const user = users.find(value => value.email === email); if (!user) throw new Error('Unknown fixture account'); user.confirmed = true; },
     get realtimeRefusals() { return realtimeRefusals; },
     async close() { server.closeAllConnections(); await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); },
   };

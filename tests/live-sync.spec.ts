@@ -25,7 +25,7 @@ async function signIn(page: Page, user: typeof fixtureUsers.alice) {
   await expect(dialog).toBeHidden();
   await expect(page.locator('.account-button strong')).toHaveText(user.name);
   await expect(page.locator('.demo-indicator')).toContainText('Community');
-  await expect(page.locator('.post-card')).toHaveCount(1);
+  await expect(page.locator('.post-card')).toHaveCount(fixture.tables.posts.length);
   await page.evaluate(name => { document.documentElement.dataset.liveDocument = name; }, user.name);
 }
 
@@ -100,6 +100,7 @@ test('controlled Supabase API: two isolated accounts see social updates and noti
     await create.getByRole('textbox', { name: /Or use a image link/ }).fill(`${new URL(liveBaseUrl!).origin}/media/studio.jpg`);
     await create.getByRole('textbox', { name: 'Title', exact: true }).fill('A photo shared with Bob');
     await create.getByRole('textbox', { name: 'Caption', exact: true }).fill('Created by Alice and delivered through the shared API.');
+    await create.getByRole('combobox', { name: 'Category', exact: true }).selectOption('Design');
     await create.getByRole('button', { name: 'Publish post', exact: true }).click();
     await expect(alice.getByRole('dialog', { name: 'A photo shared with Bob', exact: true })).toBeVisible();
     await bob.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'For you', exact: true }).click();
@@ -113,8 +114,145 @@ test('controlled Supabase API: two isolated accounts see social updates and noti
     expect(fixture.tables.messages).toHaveLength(2);
     expect(fixture.requests.filter(request => request.path === '/rest/v1/messages' && request.method === 'GET' && request.userId === fixtureUsers.bob.id).length).toBeGreaterThan(1);
     expect(fixture.realtimeRefusals).toBeGreaterThan(0);
+
+    // Newly published content and real profiles must be discoverable by another account.
+    const search = bob.getByRole('textbox', { name: 'Search TurboWatch', exact: true });
+    await bob.getByRole('button', { name: 'Travel', exact: true }).click();
+    await expect(bob.locator('.post-card')).toHaveCount(1);
+    await search.fill('A photo shared with Bob');
+    await expect(bob.locator('.post-card')).toHaveCount(1);
+    await expect(bob.getByRole('button', { name: 'A photo shared with Bob', exact: true })).toBeVisible();
+    await expect.poll(() => new URL(bob.url()).searchParams.get('q')).toBe('A photo shared with Bob');
+    await bob.reload();
+    await expect(search).toHaveValue('A photo shared with Bob');
+    await expect(bob.getByRole('button', { name: 'A photo shared with Bob', exact: true })).toBeVisible();
+    await expect(bob.locator('.account-button strong')).toHaveText(fixtureUsers.bob.name);
+    await search.fill('#sharedcoast');
+    await expect(bob.locator('.post-card')).toHaveCount(1);
+    await expect(bob.getByRole('button', { name: 'A shared coastline', exact: true })).toBeVisible();
+    await search.fill('@alice_fixture');
+    await expect(bob.locator('.creator-chip').filter({ hasText: 'Alice Fixture' })).toBeVisible();
+    expect(fixture.tables.posts.some(post => post.title === 'A photo shared with Bob' && post.creator_id === fixtureUsers.alice.id)).toBe(true);
   } finally {
     await aliceContext.close();
     await bobContext.close();
+  }
+});
+
+test('real authentication rejects bad passwords and never substitutes a demo profile', async ({ page }) => {
+  await page.goto(liveBaseUrl!);
+  await expect(page.locator('.account-button strong')).toHaveText('Join the community');
+  await expect(page.locator('.demo-indicator')).toContainText('Community');
+  await expect(page.locator('.account-button')).not.toContainText('Alex Carter');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Good to have you back.', exact: true });
+  await dialog.getByRole('textbox', { name: 'Email address', exact: true }).fill(fixtureUsers.alice.email);
+  await dialog.getByLabel('Password', { exact: true }).fill('wrong-password-123');
+  await dialog.getByRole('button', { name: 'Sign in', exact: true }).last().click();
+  await expect(dialog.getByRole('alert')).toContainText('Invalid login credentials');
+  await expect(page.locator('.account-button strong')).toHaveText('Join the community');
+  expect(await page.evaluate(() => localStorage.getItem('turbowatch:demo:v1'))).toBeNull();
+  await dialog.getByLabel('Password', { exact: true }).fill(fixturePassword);
+  await dialog.getByRole('button', { name: 'Sign in', exact: true }).last().click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.account-button strong')).toHaveText(fixtureUsers.alice.name);
+  expect(fixture.requests.some(request => request.path === '/auth/v1/token' && request.method === 'POST')).toBe(true);
+});
+
+test('a new signup gets its own profile, persists its session, publishes publicly, and signs out cleanly', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const memberContext = await browser.newContext();
+  const viewerContext = await browser.newContext();
+  const memberName = 'Nora Real Account';
+  const memberEmail = 'nora@example.test';
+  try {
+    const member = await memberContext.newPage();
+    const viewer = await viewerContext.newPage();
+    await member.goto(liveBaseUrl!);
+    await member.getByRole('button', { name: 'Create', exact: true }).click();
+    await member.getByRole('dialog').getByRole('button', { name: 'Create account', exact: true }).first().click();
+    const signup = member.getByRole('dialog', { name: 'Find your people.', exact: true });
+    await signup.getByRole('textbox', { name: 'Your name', exact: true }).fill(memberName);
+    await signup.getByRole('textbox', { name: 'Email address', exact: true }).fill(memberEmail);
+    await signup.getByLabel('Password', { exact: true }).fill(fixturePassword);
+    await signup.getByRole('button', { name: 'Create account', exact: true }).last().click();
+    await expect(signup).toBeHidden();
+    await expect(member.locator('.account-button strong')).toHaveText(memberName);
+    const profile = fixture.tables.profiles.find(row => row.name === memberName)!;
+    expect(profile).toBeTruthy();
+    expect(profile.id).not.toBe(fixtureUsers.alice.id);
+    expect(profile.id).not.toBe(fixtureUsers.bob.id);
+    expect(profile.username).not.toBe('alexcreates');
+    await member.reload();
+    await expect(member.locator('.account-button strong')).toHaveText(memberName);
+    expect(await member.evaluate(() => localStorage.getItem('turbowatch:demo:v1'))).toBeNull();
+    await member.getByRole('button', { name: 'Create', exact: true }).click();
+    const create = member.getByRole('dialog', { name: 'Make something worth sharing.', exact: true });
+    await create.getByRole('textbox', { name: /Or use a image link/ }).fill(`${new URL(liveBaseUrl!).origin}/media/studio.jpg`);
+    await create.getByRole('textbox', { name: 'Title', exact: true }).fill('Nora publishes for everyone');
+    await create.getByRole('textbox', { name: 'Caption', exact: true }).fill('A new real member, not the sample profile. #community');
+    await create.getByRole('button', { name: 'Publish post', exact: true }).click();
+    await expect(member.getByRole('dialog', { name: 'Nora publishes for everyone', exact: true })).toBeVisible();
+    expect(fixture.tables.posts.some(row => row.title === 'Nora publishes for everyone' && row.creator_id === profile.id)).toBe(true);
+
+    await signIn(viewer, fixtureUsers.bob);
+    await viewer.getByRole('textbox', { name: 'Search TurboWatch', exact: true }).fill('Nora publishes for everyone');
+    await expect(viewer.getByRole('button', { name: 'Nora publishes for everyone', exact: true })).toBeVisible();
+    await viewer.getByRole('textbox', { name: 'Search TurboWatch', exact: true }).fill(`@${profile.username}`);
+    await expect(viewer.locator('.creator-chip').filter({ hasText: memberName })).toBeVisible();
+
+    await member.getByRole('dialog', { name: 'Nora publishes for everyone', exact: true }).getByRole('button', { name: 'Close dialog', exact: true }).click();
+    await member.getByRole('button', { name: 'My profile', exact: true }).click();
+    await expect(member.getByRole('heading', { name: memberName, exact: true })).toBeVisible();
+    await member.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect(member.locator('.account-button strong')).toHaveText('Join the community');
+    await expect(member.locator('.conversation-item')).toHaveCount(0);
+    await member.reload();
+    await expect(member.locator('.account-button strong')).toHaveText('Join the community');
+    await expect(member.locator('.account-button')).not.toContainText('Alex Carter');
+    await expect(member.getByRole('button', { name: 'Nora publishes for everyone', exact: true })).toBeVisible();
+    await member.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(member.getByRole('dialog', { name: 'Good to have you back.', exact: true })).toBeVisible();
+  } finally {
+    await memberContext.close();
+    await viewerContext.close();
+  }
+});
+
+test('confirmation-required signup stays signed out until the email is confirmed and the real credentials are used', async ({ page }) => {
+  fixture.setSignupConfirmationRequired(true);
+  const email = 'confirmed-member@example.test';
+  try {
+    await page.goto(liveBaseUrl!);
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Create account', exact: true }).first().click();
+    const signup = page.getByRole('dialog', { name: 'Find your people.', exact: true });
+    await signup.getByRole('textbox', { name: 'Your name', exact: true }).fill('Confirmed Member');
+    await signup.getByRole('textbox', { name: 'Email address', exact: true }).fill(email);
+    await signup.getByLabel('Password', { exact: true }).fill(fixturePassword);
+    await signup.getByRole('button', { name: 'Create account', exact: true }).last().click();
+    const confirmation = page.getByRole('dialog', { name: 'Check your email.', exact: true });
+    await expect(confirmation.getByRole('status')).toContainText(email);
+    await expect(page.locator('.account-button strong')).toHaveText('Join the community');
+    await confirmation.getByRole('button', { name: 'Resend confirmation email', exact: true }).click();
+    await expect(confirmation.getByRole('status')).toContainText(email);
+    await expect(confirmation.getByRole('button', { name: 'Resend confirmation email', exact: true })).toBeEnabled();
+    expect(fixture.requests.filter(request => request.path === '/auth/v1/resend' && request.method === 'POST')).toHaveLength(1);
+    fixture.rejectNextConfirmationResend();
+    await confirmation.getByRole('button', { name: 'Resend confirmation email', exact: true }).click();
+    await expect(confirmation.getByRole('alert')).toContainText('Please wait before requesting another confirmation email.');
+    await expect(page.locator('.account-button strong')).toHaveText('Join the community');
+    await confirmation.getByRole('button', { name: 'Back to sign in', exact: true }).click();
+    const signInDialog = page.getByRole('dialog', { name: 'Good to have you back.', exact: true });
+    await signInDialog.getByRole('textbox', { name: 'Email address', exact: true }).fill(email);
+    await signInDialog.getByLabel('Password', { exact: true }).fill(fixturePassword);
+    await signInDialog.getByRole('button', { name: 'Sign in', exact: true }).last().click();
+    await expect(signInDialog.getByRole('alert')).toContainText('Email not confirmed');
+    fixture.confirmAccount(email);
+    await signInDialog.getByRole('button', { name: 'Sign in', exact: true }).last().click();
+    await expect(signInDialog).toBeHidden();
+    await expect(page.locator('.account-button strong')).toHaveText('Confirmed Member');
+  } finally {
+    fixture.setSignupConfirmationRequired(false);
   }
 });

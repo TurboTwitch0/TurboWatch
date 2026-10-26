@@ -305,48 +305,98 @@ export function EditProfileDialog({ onClose }: CloseProps) {
 }
 
 export function AuthDialog({ onClose }: CloseProps) {
-  const { mode, user, signIn, signUp } = useSocial();
+  const { mode, backendConfigured, setDemoMode, signIn, signUp, resendConfirmation } = useSocial();
   const [tab, setTab] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [resendStatus, setResendStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const emailInput = useRef<HTMLInputElement>(null);
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setError(''); setSuccess(''); setBusy(true);
+    event.preventDefault(); setError(''); setSuccess(''); setResendStatus('');
+    if (tab === 'signup' && !name.trim()) { setError('Enter your name so people can recognize you.'); return; }
+    setBusy(true);
     try {
       if (tab === 'signup') {
-        await signUp(email.trim(), password, name.trim());
-        setSuccess('Your account request is complete. Check your email for a confirmation link if you are not signed in yet.');
+        const result = await signUp(email.trim(), password, name.trim());
+        if (result.needsEmailConfirmation) {
+          setPassword('');
+          setSuccess(`Check ${email.trim()} for your confirmation link. Open it to verify your email, then sign in with your own account.`);
+        } else onClose();
       } else { await signIn(email.trim(), password); onClose(); }
     } catch (caught) { setError(errorMessage(caught)); }
     finally { setBusy(false); }
   };
+  const resend = async () => {
+    setError(''); setResendStatus('');
+    const address = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      setError('Enter your account email address above, then resend the confirmation email.');
+      emailInput.current?.focus();
+      return;
+    }
+    setBusy(true);
+    try {
+      await resendConfirmation(address);
+      setResendStatus(`If your account needs confirmation, a new link will arrive at ${address}. Check your inbox and spam folder.`);
+    } catch (caught) { setError(errorMessage(caught)); }
+    finally { setBusy(false); }
+  };
 
-  if (mode === 'demo') return <Dialog title="Welcome to your next rabbit hole." onClose={onClose}>
+  const leavePreview = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('demo');
+    url.searchParams.delete('post');
+    url.searchParams.delete('creator');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    setDemoMode(false);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
+  if (mode === 'demo') return <Dialog title="Sign in with your own account." onClose={onClose}>
     <div className="auth-demo">
       <div className="dialog-illustration"><Sparkles size={36} strokeWidth={1.5} /></div>
-      <h3>You’re exploring the demo.</h3>
-      <p>Like, save, post, and make this space yours as {user?.name ?? 'a demo creator'}. Your changes stay in this browser.</p>
-      <p>Live accounts and conversations with other people will be available when the site is connected.</p>
-      <button className="primary-button" onClick={onClose}>Keep exploring <ArrowUpRight size={18} /></button>
+      <p>This sample library is a preview. Join the community with your own email and password to publish posts and interact with other people.</p>
+      <button className="primary-button" onClick={leavePreview}>Sign in to real account <ArrowUpRight size={18} /></button>
+    </div>
+  </Dialog>;
+
+  if (!backendConfigured) return <Dialog title="Account setup required" onClose={onClose}>
+    <div className="auth-demo">
+      <div className="dialog-illustration"><Mail size={36} strokeWidth={1.5} /></div>
+      <p>Real sign-in needs this site's Supabase connection. The site owner must finish the database setup and add the project URL and public key in Vercel, then redeploy.</p>
+      <p>Your account will use your own email, password, and profile.</p>
+      <a className="primary-button" href="https://github.com/TurboTwitch0/TurboWatch/blob/main/supabase/SETUP.md" target="_blank" rel="noopener noreferrer">Supabase setup instructions <ArrowUpRight size={18} /></a>
+    </div>
+  </Dialog>;
+
+  if (success) return <Dialog title="Check your email." onClose={onClose}>
+    <p className="info-note" role="status"><Mail size={18} />{resendStatus || success}</p>
+    <p className="dialog-intro">If the email hasn't arrived, check your spam folder. You can sign in after confirming your address.</p>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <div className="form-stack">
+      <button type="button" className="primary-button" disabled={busy} onClick={() => { setTab('signin'); setSuccess(''); setError(''); setResendStatus(''); }}>Back to sign in <ArrowUpRight size={18} /></button>
+      <button type="button" className="secondary-button" disabled={busy} onClick={() => void resend()}>{busy ? <LoaderCircle size={18} className="spin" /> : <Mail size={18} />}{busy ? 'Sending…' : 'Resend confirmation email'}</button>
     </div>
   </Dialog>;
 
   return <Dialog title={tab === 'signin' ? 'Good to have you back.' : 'Find your people.'} onClose={onClose}>
-    <p className="dialog-intro">A place for the things you love. And the things you haven’t found yet.</p>
+    <p className="dialog-intro">{tab === 'signin' ? 'Sign in to your account to publish posts and connect with the community.' : 'Create your own account. Your posts and profile will be visible to the community.'}</p>
     <div className="tabs auth-tabs" aria-label="Account access">
-      <button type="button" className={tab === 'signin' ? 'active' : ''} onClick={() => { setTab('signin'); setError(''); setSuccess(''); }}>Sign in</button>
-      <button type="button" className={tab === 'signup' ? 'active' : ''} onClick={() => { setTab('signup'); setError(''); setSuccess(''); }}>Create account</button>
+      <button type="button" disabled={busy} className={tab === 'signin' ? 'active' : ''} onClick={() => { setTab('signin'); setError(''); setSuccess(''); setResendStatus(''); setPassword(''); }}>Sign in</button>
+      <button type="button" disabled={busy} className={tab === 'signup' ? 'active' : ''} onClick={() => { setTab('signup'); setError(''); setSuccess(''); setResendStatus(''); setPassword(''); }}>Create account</button>
     </div>
     <form className="form-stack" onSubmit={submit}>
-      {tab === 'signup' && <label className="field"><span className="input-label">Your name</span><input required maxLength={60} autoComplete="name" value={name} onChange={event => setName(event.target.value)} /></label>}
-      <label className="field"><span className="input-label">Email address</span><input data-autofocus required type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={event => setEmail(event.target.value)} /></label>
-      <label className="field"><span className="input-label">Password</span><input required minLength={8} type="password" autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} placeholder={tab === 'signup' ? 'At least 8 characters' : 'Your password'} value={password} onChange={event => setPassword(event.target.value)} /></label>
+      {tab === 'signup' && <label className="field"><span className="input-label">Your name</span><input required maxLength={60} disabled={busy} autoComplete="name" value={name} onChange={event => setName(event.target.value)} /></label>}
+      <label className="field"><span className="input-label">Email address</span><input ref={emailInput} data-autofocus required type="email" disabled={busy} autoComplete="email" placeholder="you@example.com" value={email} onChange={event => setEmail(event.target.value)} /></label>
+      <label className="field"><span className="input-label">Password</span><input required minLength={tab === 'signup' ? 8 : undefined} disabled={busy} type="password" autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} placeholder={tab === 'signup' ? 'At least 8 characters' : 'Your password'} value={password} onChange={event => setPassword(event.target.value)} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {success && <p className="info-note" role="status"><Mail size={18} />{success}</p>}
+      {resendStatus && <p className="info-note" role="status"><Mail size={18} />{resendStatus}</p>}
       <button type="submit" className="primary-button" disabled={busy}>{busy ? <LoaderCircle size={18} className="spin" /> : <ArrowUpRight size={18} />}{busy ? 'One moment…' : tab === 'signin' ? 'Sign in' : 'Create account'}</button>
+      {tab === 'signin' && <button type="button" className="text-button" disabled={busy} onClick={() => void resend()}>Resend confirmation email</button>}
     </form>
   </Dialog>;
 }

@@ -2,6 +2,8 @@
 
 A social discovery app for watching videos, finding inspiration, saving collections, and connecting with creators. Built with Next.js, React, TypeScript, and Supabase. Designed for desktop and mobile.
 
+**Real accounts setup:** Follow [supabase/SETUP.md](supabase/SETUP.md), run the complete updated [schema.sql](supabase/schema.sql), and configure the two Supabase variables in Vercel before rebuilding. The normal `/` site never signs visitors into Alex Carter. Missing configuration shows setup instructions.
+
 [![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/git/external?repository-url=https%3A%2F%2Fgithub.com%2FTurboTwitch0%2FTurboWatch)
 
 ## Run locally
@@ -13,13 +15,13 @@ npm ci
 npm run dev
 ```
 
-The app runs on port 3000. No account or external service is needed to try the demo. Demo activity is stored in this browser; accounts and conversations in the demo are fictional. Shared demo links open seeded posts in other browsers; your uploaded demo content remains local.
+The app runs on port 3000. Copy `.env.example` to `.env.local`, configure your Supabase project using [the setup guide](supabase/SETUP.md), then restart. The default site uses real email/password accounts and shared data. Without the connection, visitors stay signed out and see setup instructions; the app never substitutes a fictional account.
 
 ### Expanded demo
 
 The demo includes **40 posts: 12 shorts and 28 photo posts**, **14 fictional creators**, **7 collections**, **45 sample comments**, and **26 sample messages across 8 conversations**. The demo profile has its own posts. All images, clips, and fonts are bundled locally; credits and licenses are linked from the footer.
 
-Use `/?demo=1` or **Explore demo** to try it even when a Supabase project is connected but still being set up. **Exit demo** returns to the shared community. Switching modes and navigating within the app do not reload the page. Demo activity stays in this browser and is separate from real accounts. Returning demo visitors automatically receive new sample content while keeping their own uploads, edits, likes, unsaves, comments, messages, and collections.
+The optional `/?demo=1` URL is an explicitly labeled sample preview; it is not the sign-in flow. **Sign in to real account** exits the preview and opens real account access without reloading the page. There is no sample-mode entry button on the normal community site. Sample activity stays in this browser and is separate from real accounts; old local posts are not automatically published under a new identity. Returning demo visitors automatically receive new sample content while keeping their own uploads, edits, likes, unsaves, comments, messages, and collections.
 
 Shorts support the previous/next controls, keyboard arrows, and vertical swipes. The category row includes all available categories, including Art and Music.
 
@@ -29,16 +31,18 @@ Shorts support the previous/next controls, keyboard arrows, and vertical swipes.
 - Likes, comments, reposts, native sharing or copyable post links, and following creators.
 - Private saved collections, profile editing, photo/video publishing, and direct messages.
 - Responsive layouts, keyboard navigation, accessible dialogs, reduced-motion support, and locally bundled media/fonts.
-- A persistent local demo, plus a Supabase-backed mode with real authentication and shared data.
+- Real email/password registration and sign-in, unique profiles, persisted sessions, confirmation-email handling and resending, and Supabase-backed shared data. A separate explicit sample URL is available for development.
 
 Demo uploads allow files up to 2 MB, subject to the browser's storage quota. Larger videos can use hosted URLs. Community uploads allow up to 50 MB. Uploads and posts are public; message text and collections are private to their participants/owners.
 
 ## Enable the shared community
 
+Use the complete [new Supabase setup guide](supabase/SETUP.md) for fresh projects or to upgrade an existing project without deleting real users or posts. The SQL includes a per-account profile trigger, repairs missing profiles for existing auth users, preserves profile edits, and prevents username collisions.
+
 1. Create a Supabase project and execute the complete [supabase/schema.sql](supabase/schema.sql) in its SQL editor. The migration is rerunnable and includes ownership rules, private-message policies, authentication profile creation, atomic collection saves, and the public media bucket.
 2. Copy `.env.example` to `.env.local`. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` using the project's URL and **public anon/publishable key** from its API settings. Never use a service-role key in a `NEXT_PUBLIC_` variable.
 3. In Supabase Authentication URL Configuration, set the Site URL to your deployed HTTPS origin. For local testing, add the local origin as an allowed redirect URL. Enable email/password authentication. If email confirmation is enabled, users must confirm their email before signing in.
-4. Restart development or rebuild production. Next.js embeds these public variables at build time. When both values are supplied, the app uses the shared backend and starts with an empty community instead of fictional demo content. Create an account and publish the first post.
+4. Restart development or rebuild production. Next.js embeds these public variables at build time. The normal app always uses real account access; the connection must be configured for it to work. New projects start with an empty shared feed. Create your own account and publish the first post. Each account gets its own profile ID and unique username; display names can match without sharing an account.
 
 The schema's Realtime publication includes public posts/comments and participant-filtered messages. Collections and saved state refresh after each mutation. A network or schema failure displays an error; the app does not silently switch a live community to demo mode.
 
@@ -70,6 +74,10 @@ This error means the Supabase Data API cannot resolve the table in its schema ca
 
 Applying the database schema or refreshing its API cache takes effect without a Vercel redeployment. Changing a `NEXT_PUBLIC_` URL or key requires a new app build because Next.js embeds those values at build time. Never paste database passwords or service-role keys into the app or a support message.
 
+## Search
+
+Search finds published posts by title, description, category, tags (including `#tag`), and creator name or `@username`. Matching people appear above the post results. Searches ignore case and accents and support multiple words. Changing the search clears a stale category filter. The `q` URL parameter preserves the query when you reload or share a search link, and browser back/forward restores it without refreshing the document. Search on the normal site reads the loaded shared feed (up to the latest 200 posts) and available public profiles. Explicit sample-mode searches stay within the fictional library.
+
 ## Shared interactions without page refreshes
 
 With the Supabase setup complete, signed-in users share real posts, likes, comments, follows, reposts, and direct messages. Post owners receive activity notifications, and reposts appear on public profiles. Saved posts and collections remain private; messages are visible only to their participants.
@@ -83,9 +91,9 @@ The repository's database access policies still control who can read or write ea
 Click [Deploy to Vercel](https://vercel.com/new/git/external?repository-url=https%3A%2F%2Fgithub.com%2FTurboTwitch0%2FTurboWatch) to import this GitHub repository into your Vercel account. If Vercel asks for GitHub access, allow access to `TurboTwitch0/TurboWatch`.
 
 1. Import `TurboTwitch0/TurboWatch` from branch `main`. Keep the Root Directory at the repository root (`./`), choose **Next.js**, and use **Node.js 24.x**. Do not set the Root Directory to `TurboWatch`; that folder name belongs to the cloud workspace, not the repository.
-2. Leave the Supabase variables unset to deploy the interactive demo immediately. No database or secret is required for demo mode.
+2. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` for the deployment environment before building, using the URL and public anon/publishable key from the same Supabase project. Missing variables show account setup instructions and do not enable demo sign-in.
 3. Click **Deploy**. `vercel.json` supplies the install command (`npm ci`) and build command (`npm run build`). Leave the Output Directory at the Next.js default; do not set it to `public` or `out`.
-4. Open the HTTPS URL Vercel provides. Try a video, save a post, and reload to check browser-local persistence. Your website is public once Vercel reports the deployment is ready.
+4. Open the HTTPS URL Vercel provides without `?demo=1`. Create and confirm your real account, publish a post, then open a private browser window to check that the post is public. Use the two-account checks in [supabase/SETUP.md](supabase/SETUP.md) to verify interactions.
 
 For real accounts and shared posts/messages, follow **Enable the shared community** above, configure both Supabase public variables in Vercel **before building**, and set Supabase's Site URL and allowed redirects to your deployed HTTPS origin. Rebuild/redeploy after changing a `NEXT_PUBLIC_` variable. Demo mode does not send messages to real people or share new posts across devices.
 
@@ -104,11 +112,11 @@ npm run build
 npm start
 ```
 
-The database test runs PostgreSQL locally in isolated PGlite memory. It applies the actual schema twice and runs 25 checks for ownership, private messaging, collection isolation, uploads, profile verification restrictions, and atomic saves. It does not contact a Supabase project.
+The database test runs PostgreSQL locally in isolated PGlite memory. It applies the actual schema twice and runs 40 checks for ownership, private messaging, collection isolation, uploads, profile verification restrictions, and atomic saves. It does not contact a Supabase project.
 
-Playwright covers search/filtering, persisted likes/saves, comments/reposts/share links, collections, profile editing, direct messages, publishing, all 12 video files, mobile navigation, demo upgrades, keyboard/swipe shortcuts, and preservation of media/scroll/drafts across interactions. The nine Node demo-state tests check migration of older browser data without losing user activity. The runner starts the app automatically when needed. It uses system Chromium when available; otherwise install Playwright Chromium with `npx playwright install chromium`. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for another local Chromium installation, or `TEST_BASE_URL` to test an already running server.
+Playwright covers search/filtering, persisted likes/saves, comments/reposts/share links, collections, profile editing, direct messages, publishing, all 12 video files, mobile navigation, demo upgrades, keyboard/swipe shortcuts, and preservation of media/scroll/drafts across interactions. The nine Node demo-state tests check migration of older browser data without losing user activity. The default browser run uses an unconfigured app: `auth-required.spec.ts` verifies that missing configuration never creates a fake login, and sample workflows explicitly visit `?demo=1`. Keep Supabase variables unset for that run; use the separate connected fixture command below for account tests. The runner starts the app automatically when needed. It uses system Chromium when available; otherwise install Playwright Chromium with `npx playwright install chromium`. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for another local Chromium installation, or `TEST_BASE_URL` to test an already running server.
 
-The opt-in `tests/live-sync.spec.ts` uses two isolated signed-in browser contexts, the actual Supabase client SDK, and a controlled local HTTP fixture. It checks recipient notifications, shared publishing, bidirectional private messages, polling recovery, and preservation of the receiver's document/video/draft. Its fixture deliberately refuses Realtime sockets. It does **not** connect to hosted Supabase or substitute for the separate PostgreSQL policy tests. To run it, start a separate app instance using only these test values:
+The opt-in tests in `tests/live-sync.spec.ts` use isolated browser contexts, the actual Supabase client SDK, and a controlled local HTTP fixture. They check actual email/password requests to the test API, unique signup profiles, email confirmation, password rejection, persisted sessions, logout isolation, recipient notifications, shared publishing/search, bidirectional private messages, polling recovery, and preservation of the receiver's document/video/draft. Its fixture deliberately refuses Realtime sockets. It does **not** connect to hosted Supabase or substitute for the separate PostgreSQL policy tests. To run it, start a separate app instance using only these test values:
 
 ```sh
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:4400 \
@@ -125,7 +133,7 @@ npm run test:e2e -- tests/live-sync.spec.ts
 
 The test starts and stops its local API fixture. These values are test-only public placeholders, not real project credentials. Keep them out of production settings.
 
-Verified during development: production build, TypeScript, all 25 database checks, the browser workflows, the two-account local integration, the demo-state migration tests, and all 12 local videos. Live Supabase connectivity and public Vercel deployment require your project configuration and have not been verified.
+Verified during development: production build, TypeScript, all 40 database checks, the browser workflows, the two-account local integration, the demo-state migration tests, and all 12 local videos. Live Supabase connectivity and public Vercel deployment require your project configuration and have not been verified.
 
 ## Project map
 
@@ -133,6 +141,8 @@ Verified during development: production build, TypeScript, all 25 database check
 - `app/globals.css` — responsive visual system.
 - `components/Dialogs.tsx` — publishing, profile, authentication, collections, and sharing forms.
 - `lib/store.tsx` — persistent demo and Supabase adapters.
+- `lib/search.ts` — post, creator, username, and tag matching.
+- `supabase/SETUP.md` — real-account configuration and repair steps.
 - `lib/seed.ts` — fictional demo content.
 - `supabase/schema.sql` — shared backend and row-level access policies.
 - `public/media/SOURCES.md` — bundled media credits and licenses.

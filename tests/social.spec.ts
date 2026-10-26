@@ -4,7 +4,7 @@ import { seedCreators, seedPosts } from '../lib/seed';
 const origin = new URL(process.env.TEST_BASE_URL || 'http://127.0.0.1:3000').origin;
 
 async function home(page: Page) {
-  await page.goto('/');
+  await page.goto('/?demo=1');
   await expect(page.getByRole('heading', { name: 'Stay curious.' })).toBeVisible();
   await expect(page.locator('.post-card')).toHaveCount(seedPosts.length);
 }
@@ -62,7 +62,7 @@ test('post comments, reposts, and share links persist and open the selected post
   await expect(detail.getByRole('button', { name: 'Repost post', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await detail.getByRole('button', { name: 'Share post', exact: true }).click();
   const share = page.getByRole('dialog', { name: 'Good things are better shared.', exact: true });
-  await expect(share.getByRole('textbox', { name: 'Post link' })).toHaveValue(`${origin}/?post=coast-escape`);
+  await expect(share.getByRole('textbox', { name: 'Post link' })).toHaveValue(`${origin}/?demo=1&post=coast-escape`);
   await share.getByRole('button', { name: 'Copy link', exact: true }).click();
   await expect(share.getByRole('button', { name: 'Link copied', exact: true })).toBeVisible();
   await share.getByRole('button', { name: 'Close dialog', exact: true }).click();
@@ -71,7 +71,7 @@ test('post comments, reposts, and share links persist and open the selected post
   await expect(detail.getByRole('button', { name: 'Repost post', exact: true })).toHaveAttribute('aria-pressed', 'true');
   const clean = await context.browser()!.newContext();
   const sharedPage = await clean.newPage();
-  await sharedPage.goto(`${origin}/?post=coast-escape`);
+  await sharedPage.goto(`${origin}/?demo=1&post=coast-escape`);
   await expect(sharedPage.getByRole('dialog', { name: 'Take the scenic route.', exact: true })).toBeVisible();
   await expect(sharedPage.getByText('A perspective worth saving — browser test.', { exact: true })).toHaveCount(0);
   await clean.close();

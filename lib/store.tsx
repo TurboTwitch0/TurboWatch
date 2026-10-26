@@ -30,6 +30,7 @@ import { createRefreshQueue, reconcileRows, sameStrings, type RefreshQueue } fro
 
 const STORAGE_KEY = 'turbowatch:demo:v1';
 const EPOCH = '1970-01-01T00:00:00.000Z';
+const BACKEND_SETUP_MESSAGE = 'Real accounts are not configured yet. The site owner must set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel, then redeploy. No demo account is signed in.';
 
 function initialDemoState(): SocialState {
   return createDemoState({ user: demoUser, creators: seedCreators, posts: seedPosts, comments: seedComments, messages: seedMessages, boards: seedBoards });
@@ -140,6 +141,7 @@ function reconcileState(previous: SocialState, incoming: SocialState): SocialSta
 export interface SocialContextValue extends SocialState {
   currentUser: Creator | null;
   mode: 'demo' | 'live';
+  backendConfigured: boolean;
   loading: boolean;
   error: string | null;
   notice: string | null;
@@ -165,14 +167,17 @@ export interface SocialContextValue extends SocialState {
   markNotificationsRead: () => void;
   uploadMedia: (file: File) => Promise<string>;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<{ needsEmailConfirmation: boolean }>;
+  resendConfirmation: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const SocialContext = createContext<SocialContextValue | null>(null);
 
 export function SocialProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<SocialState>(() => liveBackendConfigured ? emptyLiveState() : initialDemoState());
+  // A missing backend must never sign every visitor into the same fictional
+  // identity. Sample data is available only through an explicit demo URL.
+  const [state, setState] = useState<SocialState>(emptyLiveState);
   const stateRef = useRef(state);
   const demoHydratedRef = useRef(false);
   const [loading, setLoading] = useState(true);
@@ -182,7 +187,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<'connecting' | 'live' | 'polling' | 'offline'>('connecting');
   const [demoRequested, setDemoRequested] = useState<boolean | null>(null);
   const demoRequestedRef = useRef<boolean | null>(null);
-  const mode = liveBackendConfigured && demoRequested !== true ? 'live' : 'demo';
+  const mode = demoRequested === true ? 'demo' : 'live';
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
@@ -229,7 +234,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     if (demoRequestedRef.current === enabled) return;
     const alreadyInitialized = demoRequestedRef.current !== null;
     demoRequestedRef.current = enabled;
-    const nextMode = liveBackendConfigured && !enabled ? 'live' : 'demo';
+    const nextMode = enabled ? 'demo' : 'live';
     setDemoRequested(enabled);
     if (alreadyInitialized && nextMode === modeRef.current) return;
     modeRef.current = nextMode;
@@ -269,10 +274,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const refreshLive = useCallback(async (userId: string | null) => {
     if (modeRef.current !== 'live') return;
     const db = getSupabase();
-    if (!db) return;
+    if (!db) throw new Error(BACKEND_SETUP_MESSAGE);
     const generation = ++refreshGeneration.current;
-    const [profiles, posts, likes, comments, follows, reposts, saved, boards, boardPosts, messages, reads] = await Promise.all([
+    const [profiles, currentProfile, posts, likes, comments, follows, reposts, saved, boards, boardPosts, messages, reads] = await Promise.all([
       db.from('profiles').select('*'),
+      // The community listing may be capped by PostgREST. Fetch this account
+      // directly so a profile outside that page never looks like a broken login.
+      userId ? db.from('profiles').select('*').eq('id', userId) : Promise.resolve({ data: [], error: null }),
       db.from('posts').select('*').order('created_at', { ascending: false }).limit(200),
       db.from('post_likes').select('post_id,user_id,created_at'),
       db.from('comments').select('*').order('created_at', { ascending: false }).limit(1000),
@@ -285,14 +293,19 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       userId ? db.from('message_reads').select('peer_id,read_at').eq('user_id', userId) : Promise.resolve({ data: [], error: null }),
     ]);
     if (generation !== refreshGeneration.current || userId !== liveUserId.current || modeRef.current !== 'live') return;
-    const failure = [profiles, posts, likes, comments, follows, reposts, saved, boards, boardPosts, messages, reads].find((result) => result.error)?.error;
+    const failure = [profiles, currentProfile, posts, likes, comments, follows, reposts, saved, boards, boardPosts, messages, reads].find((result) => result.error)?.error;
     if (failure) {
       if (failure.code === 'PGRST205' || failure.code === '42P01') {
         throw new Error('Community database setup is incomplete. The site owner needs to create or refresh the schema using the setup instructions below, then try again.');
       }
       throw new Error(`Could not load your community: ${failure.message}`);
     }
-    const creators: Creator[] = (profiles.data ?? []).map((row: ProfileRow) => profileFromRow(row, (follows.data ?? []).filter((follow) => follow.following_id === row.id).length));
+    const profileRows = new Map<string, ProfileRow>();
+    for (const row of [...(profiles.data ?? []), ...(currentProfile.data ?? [])] as ProfileRow[]) profileRows.set(row.id, row);
+    const creators: Creator[] = [...profileRows.values()].map((row) => profileFromRow(row, (follows.data ?? []).filter((follow) => follow.following_id === row.id).length));
+    if (userId && !creators.some((creator) => creator.id === userId)) {
+      throw new Error('You are signed in, but your account profile is missing. The site owner needs to run the complete updated supabase/schema.sql to create profiles for existing accounts.');
+    }
     replaceState({
       user: creators.find((creator) => creator.id === userId) ?? null,
       creators,
@@ -345,7 +358,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    if (!db) return;
+    if (!db) {
+      replaceState(emptyLiveState());
+      setError(BACKEND_SETUP_MESSAGE);
+      setSyncStatus('offline');
+      setLoading(false);
+      return;
+    }
     const client = db;
     let active = true;
     let authVersion = 0;
@@ -516,6 +535,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   const requireUser = (): Creator => {
     ensureDemoHydrated();
+    if (modeRef.current === 'live' && !liveBackendConfigured) throw new Error(BACKEND_SETUP_MESSAGE);
     const user = stateRef.current.user;
     if (!user) throw new Error('Sign in to join the conversation.');
     return user;
@@ -740,9 +760,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   });
 
   const requireAuthBackend = () => {
-    if (modeRef.current !== 'live') throw new Error('Switch to the community to use a real account. Demo activity stays in this browser.');
+    if (modeRef.current !== 'live') throw new Error('Leave the sample preview to sign in to your own real account.');
     const db = getSupabase();
-    if (!db) throw new Error('Real accounts require a connected Supabase project. You can explore all demo features with the demo profile.');
+    if (!db) throw new Error(BACKEND_SETUP_MESSAGE);
     return db;
   };
 
@@ -750,8 +770,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const db = requireAuthBackend();
     const generation = modeGeneration.current;
     const { data, error: failure } = await db.auth.signInWithPassword({ email: email.trim(), password });
-    if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) throw new DOMException('This sign-in belongs to a previous session.', 'AbortError');
     if (failure) throw new Error(failure.message);
+    if (!data.session || !data.user) throw new Error('Sign-in did not return a valid account session. Please try again.');
     setLiveIdentity(data.user.id);
     await refreshAfterMutation(data.user.id);
     if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
@@ -763,16 +784,35 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const generation = modeGeneration.current;
     const clean = textValue(name, 'Name', 60);
     if (password.length < 8) throw new Error('Use a password with at least 8 characters.');
-    const { data, error: failure } = await db.auth.signUp({ email: email.trim(), password, options: { data: { name: clean } } });
-    if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
+    const { data, error: failure } = await db.auth.signUp({
+      email: email.trim(), password,
+      options: { data: { name: clean }, emailRedirectTo: new URL('/', window.location.origin).href },
+    });
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) throw new DOMException('This signup belongs to a previous session.', 'AbortError');
     if (failure) throw new Error(failure.message);
+    if (!data.user) throw new Error('Account creation did not complete. Please try again.');
     if (data.session && data.user) {
       setLiveIdentity(data.user.id);
       await refreshAfterMutation(data.user.id);
-      if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
+      if (modeRef.current !== 'live' || generation !== modeGeneration.current) throw new DOMException('This signup belongs to a previous session.', 'AbortError');
       setNotice('Your account is ready. Make yourself at home.');
-    } else setNotice('Check your email to confirm your account, then sign in.');
+      return { needsEmailConfirmation: false };
+    }
+    setNotice('Check your email to confirm your account, then sign in.');
+    return { needsEmailConfirmation: true };
   }, true);
+
+  const resendConfirmation = (email: string) => run(async () => {
+    const db = requireAuthBackend();
+    const generation = modeGeneration.current;
+    const cleanEmail = textValue(email, 'Email address', 320);
+    const { error: failure } = await db.auth.resend({
+      type: 'signup', email: cleanEmail,
+      options: { emailRedirectTo: new URL('/', window.location.origin).href },
+    });
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) throw new DOMException('This confirmation belongs to a previous session.', 'AbortError');
+    if (failure) throw new Error(failure.message);
+  });
 
   const signOut = () => run(async () => {
     if (mode === 'demo') {
@@ -780,7 +820,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       return;
     }
     const generation = modeGeneration.current;
-    const { error: failure } = await getSupabase()!.auth.signOut();
+    const { error: failure } = await requireAuthBackend().auth.signOut();
     if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
     if (failure) throw new Error(failure.message);
     setLiveIdentity(null);
@@ -833,12 +873,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   }, [mode, state.user, state.repostedIds, publicActivity.reposts]);
 
   return <SocialContext.Provider value={{
-    ...state, currentUser: state.user, mode, loading, error, notice, conversations, notifications,
+    ...state, currentUser: state.user, mode, backendConfigured: liveBackendConfigured, loading, error, notice, conversations, notifications,
     publicReposts, syncStatus, refreshCommunity, setDemoMode,
     clearError: () => setError(null), clearNotice: () => setNotice(null),
     toggleLike, toggleSave, toggleRepost, toggleFollow, addComment, createPost, updateProfile,
     sendMessage, createBoard, saveToBoard, markConversationRead, markNotificationsRead,
-    uploadMedia, signIn, signUp, signOut,
+    uploadMedia, signIn, signUp, resendConfirmation, signOut,
   }}>{children}</SocialContext.Provider>;
 }
 

@@ -109,6 +109,45 @@ create index if not exists messages_recipient_idx on public.messages(recipient_i
 create index if not exists messages_sender_idx on public.messages(sender_id, created_at);
 create index if not exists board_posts_post_idx on public.board_posts(post_id);
 
+-- Real accounts get a profile keyed to auth.users.id. No demo accounts or
+-- shared identities are inserted by this setup. Display names may match;
+-- usernames remain unique even for equal names or similar UUID prefixes.
+create or replace function public.provision_user_profile(target_user_id uuid, user_metadata jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  display_name text := left(coalesce(
+    nullif(btrim(user_metadata ->> 'name'), ''),
+    nullif(btrim(user_metadata ->> 'full_name'), ''), 'New creator'), 60);
+  username_base text := coalesce(nullif(lower(left(
+    regexp_replace(display_name, '[^a-zA-Z0-9_]', '', 'g'), 10)), ''), 'creator');
+  username_attempt integer := 0;
+  candidate_username text;
+begin
+  loop
+    candidate_username := username_base || '_' || left(
+      md5(target_user_id::text || ':' || username_attempt::text), 12);
+    begin
+      insert into public.profiles (id, name, username)
+      values (target_user_id, display_name, candidate_username)
+      on conflict (id) do nothing;
+      return;
+    exception when unique_violation then
+      username_attempt := username_attempt + 1;
+      if username_attempt >= 20 then
+        raise exception 'Could not create a unique profile username. Please retry.';
+      end if;
+    end;
+  end loop;
+end;
+$$;
+
+-- This is an internal helper, not a browser-callable profile creation RPC.
+revoke all on function public.provision_user_profile(uuid, jsonb) from public, anon, authenticated;
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -116,29 +155,26 @@ security definer
 set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, name, username)
-  values (
-    new.id,
-    left(coalesce(nullif(btrim(new.raw_user_meta_data ->> 'name'), ''), 'New creator'), 60),
-    lower(left(regexp_replace(coalesce(new.raw_user_meta_data ->> 'name', 'creator'), '[^a-zA-Z0-9_]', '', 'g'), 10))
-      || '_' || left(replace(new.id::text, '-', ''), 12)
-  );
+  perform public.provision_user_profile(new.id, new.raw_user_meta_data);
   return new;
 end;
 $$;
+revoke all on function public.handle_new_user() from public, anon, authenticated;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- Backfill profiles for accounts created before this schema was applied.
-insert into public.profiles (id, name, username)
-select id,
-  left(coalesce(nullif(btrim(raw_user_meta_data ->> 'name'), ''), 'New creator'), 60),
-  lower(left(regexp_replace(coalesce(raw_user_meta_data ->> 'name', 'creator'), '[^a-zA-Z0-9_]', '', 'g'), 10))
-    || '_' || left(replace(id::text, '-', ''), 12)
-from auth.users
-on conflict (id) do nothing;
+-- Repair profiles missing from accounts created before setup, while preserving
+-- existing profiles, edits, posts, and interactions when this script is rerun.
+do $$
+declare account record;
+begin
+  for account in select id, raw_user_meta_data from auth.users loop
+    perform public.provision_user_profile(account.id, account.raw_user_meta_data);
+  end loop;
+end;
+$$;
 
 alter table public.profiles enable row level security;
 alter table public.posts enable row level security;
@@ -151,6 +187,8 @@ alter table public.boards enable row level security;
 alter table public.board_posts enable row level security;
 alter table public.messages enable row level security;
 alter table public.message_reads enable row level security;
+
+grant usage on schema public to anon, authenticated;
 
 revoke all on public.profiles, public.posts, public.post_likes, public.reposts,
   public.saved_posts, public.comments, public.follows, public.boards,
