@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import type {
   Board,
   Comment,
@@ -24,26 +25,14 @@ import type {
 } from './model';
 import { demoUser, seedBoards, seedComments, seedCreators, seedMessages, seedPosts } from './seed';
 import { getSupabase, liveBackendConfigured } from './supabase';
+import { createDemoState, restoreDemo } from './demo-state';
+import { createRefreshQueue, reconcileRows, sameStrings, type RefreshQueue } from './live-sync';
 
 const STORAGE_KEY = 'turbowatch:demo:v1';
 const EPOCH = '1970-01-01T00:00:00.000Z';
 
 function initialDemoState(): SocialState {
-  const creators = [demoUser, ...seedCreators.filter((creator) => creator.id !== demoUser.id)];
-  return {
-    user: demoUser,
-    creators,
-    posts: seedPosts,
-    comments: seedComments,
-    messages: seedMessages,
-    boards: seedBoards,
-    likedIds: [],
-    savedIds: [...new Set(seedBoards.flatMap((board) => board.postIds))],
-    repostedIds: [],
-    followingIds: [],
-    readAt: {},
-    notificationsReadAt: EPOCH,
-  };
+  return createDemoState({ user: demoUser, creators: seedCreators, posts: seedPosts, comments: seedComments, messages: seedMessages, boards: seedBoards });
 }
 
 function emptyLiveState(): SocialState {
@@ -84,17 +73,6 @@ function validMediaUrl(value: string, allowData = true): boolean {
   }
 }
 
-function restoreDemo(raw: string | null): SocialState {
-  if (!raw) return initialDemoState();
-  try {
-    const parsed: SocialState = JSON.parse(raw);
-    const arrays: (keyof SocialState)[] = ['creators', 'posts', 'comments', 'messages', 'boards', 'likedIds', 'savedIds', 'repostedIds', 'followingIds'];
-    if (!parsed.user || !arrays.every((key) => Array.isArray(parsed[key]))) return initialDemoState();
-    return { ...initialDemoState(), ...parsed, readAt: parsed.readAt ?? {}, notificationsReadAt: parsed.notificationsReadAt ?? EPOCH };
-  } catch {
-    return initialDemoState();
-  }
-}
 
 interface ProfileRow {
   id: string;
@@ -135,6 +113,30 @@ function postFromRow(row: PostRow, likes = 0): Post {
   };
 }
 
+interface LikeRow { user_id: string; post_id: string; created_at: string }
+interface FollowRow { follower_id: string; following_id: string; created_at: string }
+interface PublicActivity { likes: LikeRow[]; follows: FollowRow[]; reposts: LikeRow[] }
+const EMPTY_ACTIVITY: PublicActivity = { likes: [], follows: [], reposts: [] };
+
+function reconcileState(previous: SocialState, incoming: SocialState): SocialState {
+  const creators = reconcileRows(previous.creators, incoming.creators);
+  const next: SocialState = {
+    ...incoming,
+    user: incoming.user ? creators.find((creator) => creator.id === incoming.user?.id) ?? incoming.user : null,
+    creators,
+    posts: reconcileRows(previous.posts, incoming.posts),
+    comments: reconcileRows(previous.comments, incoming.comments),
+    messages: reconcileRows(previous.messages, incoming.messages),
+    boards: reconcileRows(previous.boards, incoming.boards),
+    likedIds: sameStrings(previous.likedIds, incoming.likedIds),
+    savedIds: sameStrings(previous.savedIds, incoming.savedIds),
+    repostedIds: sameStrings(previous.repostedIds, incoming.repostedIds),
+    followingIds: sameStrings(previous.followingIds, incoming.followingIds),
+    readAt: JSON.stringify(previous.readAt) === JSON.stringify(incoming.readAt) ? previous.readAt : incoming.readAt,
+  };
+  return (Object.keys(next) as (keyof SocialState)[]).every((key) => next[key] === previous[key]) ? previous : next;
+}
+
 export interface SocialContextValue extends SocialState {
   currentUser: Creator | null;
   mode: 'demo' | 'live';
@@ -143,6 +145,10 @@ export interface SocialContextValue extends SocialState {
   notice: string | null;
   conversations: Conversation[];
   notifications: Notification[];
+  publicReposts: Record<string, string[]>;
+  syncStatus: 'connecting' | 'live' | 'polling' | 'offline';
+  refreshCommunity: () => Promise<void>;
+  setDemoMode: (enabled: boolean) => void;
   clearError: () => void;
   clearNotice: () => void;
   toggleLike: (postId: string) => Promise<void>;
@@ -168,19 +174,43 @@ const SocialContext = createContext<SocialContextValue | null>(null);
 export function SocialProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SocialState>(() => liveBackendConfigured ? emptyLiveState() : initialDemoState());
   const stateRef = useRef(state);
+  const demoHydratedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const mode = liveBackendConfigured ? 'live' : 'demo';
+  const [publicActivity, setPublicActivity] = useState<PublicActivity>(EMPTY_ACTIVITY);
+  const [syncStatus, setSyncStatus] = useState<'connecting' | 'live' | 'polling' | 'offline'>('connecting');
+  const [demoRequested, setDemoRequested] = useState<boolean | null>(null);
+  const demoRequestedRef = useRef<boolean | null>(null);
+  const mode = liveBackendConfigured && demoRequested !== true ? 'live' : 'demo';
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+
   const liveUserId = useRef<string | null>(null);
+  const modeGeneration = useRef(0);
   const refreshGeneration = useRef(0);
+  const refreshQueueRef = useRef<RefreshQueue | null>(null);
+  const syncErrorRef = useRef(false);
 
   const replaceState = useCallback((next: SocialState) => {
-    stateRef.current = next;
-    setState(next);
+    const reconciled = reconcileState(stateRef.current, next);
+    if (reconciled === stateRef.current) return;
+    stateRef.current = reconciled;
+    setState(reconciled);
   }, []);
 
+  const ensureDemoHydrated = useCallback(() => {
+    if (modeRef.current !== 'demo' || demoHydratedRef.current) return;
+    // Child effects can run before this provider's hydration effect. Read the
+    // saved snapshot before any mutation computes from the initial seed state.
+    // If reading storage fails, leave the guard unset and refuse to overwrite it.
+    const restored = restoreDemo(window.localStorage.getItem(STORAGE_KEY), initialDemoState());
+    replaceState(restored);
+    demoHydratedRef.current = true;
+  }, [replaceState]);
+
   const setLiveIdentity = useCallback((userId: string | null) => {
+    if (modeRef.current !== 'live') return;
     if (liveUserId.current !== userId || (stateRef.current.user && stateRef.current.user.id !== userId)) {
       // Never keep the previous account's private data on screen while a new
       // session loads, even if that refresh fails or the machine goes offline.
@@ -189,12 +219,44 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         user: null, messages: [], boards: [], likedIds: [], savedIds: [],
         repostedIds: [], followingIds: [], readAt: {}, notificationsReadAt: EPOCH,
       });
+      refreshGeneration.current += 1;
       setLoading(true);
     }
     liveUserId.current = userId;
   }, [replaceState]);
 
+  const setDemoMode = useCallback((enabled: boolean) => {
+    if (demoRequestedRef.current === enabled) return;
+    const alreadyInitialized = demoRequestedRef.current !== null;
+    demoRequestedRef.current = enabled;
+    const nextMode = liveBackendConfigured && !enabled ? 'live' : 'demo';
+    setDemoRequested(enabled);
+    if (alreadyInitialized && nextMode === modeRef.current) return;
+    modeRef.current = nextMode;
+    modeGeneration.current += 1;
+    demoHydratedRef.current = false;
+    refreshGeneration.current += 1;
+    refreshQueueRef.current?.dispose();
+    refreshQueueRef.current = null;
+    liveUserId.current = null;
+    setError(null);
+    setNotice(null);
+    syncErrorRef.current = false;
+    setPublicActivity(EMPTY_ACTIVITY);
+    setLoading(true);
+    replaceState(nextMode === 'demo' ? initialDemoState() : emptyLiveState());
+  }, [replaceState]);
+
+  useEffect(() => {
+    const readMode = () => setDemoMode(new URLSearchParams(window.location.search).get('demo') === '1');
+    readMode();
+    window.addEventListener('popstate', readMode);
+    return () => window.removeEventListener('popstate', readMode);
+  }, [setDemoMode]);
+
   const commitDemo = useCallback((update: (previous: SocialState) => SocialState) => {
+    if (modeRef.current !== 'demo') throw new DOMException('This demo session is no longer active.', 'AbortError');
+    ensureDemoHydrated();
     const next = update(stateRef.current);
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -202,25 +264,27 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       throw new Error('Your browser storage is full or unavailable. Try a smaller upload or enable site storage. This change was not saved.');
     }
     replaceState(next);
-  }, [replaceState]);
+  }, [ensureDemoHydrated, replaceState]);
 
   const refreshLive = useCallback(async (userId: string | null) => {
+    if (modeRef.current !== 'live') return;
     const db = getSupabase();
     if (!db) return;
     const generation = ++refreshGeneration.current;
     const [profiles, posts, likes, comments, follows, reposts, saved, boards, boardPosts, messages, reads] = await Promise.all([
       db.from('profiles').select('*'),
       db.from('posts').select('*').order('created_at', { ascending: false }).limit(200),
-      db.from('post_likes').select('post_id,user_id'),
+      db.from('post_likes').select('post_id,user_id,created_at'),
       db.from('comments').select('*').order('created_at', { ascending: false }).limit(1000),
-      db.from('follows').select('follower_id,following_id'),
-      userId ? db.from('reposts').select('post_id').eq('user_id', userId) : Promise.resolve({ data: [], error: null }),
+      db.from('follows').select('follower_id,following_id,created_at'),
+      db.from('reposts').select('post_id,user_id,created_at'),
       userId ? db.from('saved_posts').select('post_id').eq('user_id', userId) : Promise.resolve({ data: [], error: null }),
       userId ? db.from('boards').select('*').eq('user_id', userId).order('created_at') : Promise.resolve({ data: [], error: null }),
       userId ? db.from('board_posts').select('board_id,post_id') : Promise.resolve({ data: [], error: null }),
       userId ? db.from('messages').select('*').or(`sender_id.eq.${userId},recipient_id.eq.${userId}`).order('created_at', { ascending: false }).limit(1000) : Promise.resolve({ data: [], error: null }),
       userId ? db.from('message_reads').select('peer_id,read_at').eq('user_id', userId) : Promise.resolve({ data: [], error: null }),
     ]);
+    if (generation !== refreshGeneration.current || userId !== liveUserId.current || modeRef.current !== 'live') return;
     const failure = [profiles, posts, likes, comments, follows, reposts, saved, boards, boardPosts, messages, reads].find((result) => result.error)?.error;
     if (failure) {
       if (failure.code === 'PGRST205' || failure.code === '42P01') {
@@ -228,7 +292,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(`Could not load your community: ${failure.message}`);
     }
-    if (generation !== refreshGeneration.current || userId !== liveUserId.current) return;
     const creators: Creator[] = (profiles.data ?? []).map((row: ProfileRow) => profileFromRow(row, (follows.data ?? []).filter((follow) => follow.following_id === row.id).length));
     replaceState({
       user: creators.find((creator) => creator.id === userId) ?? null,
@@ -239,65 +302,212 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       boards: (boards.data ?? []).map((row) => ({ id: row.id, name: row.name, description: row.description, postIds: (boardPosts.data ?? []).filter((item) => item.board_id === row.id).map((item) => item.post_id) })),
       likedIds: (likes.data ?? []).filter((like) => like.user_id === userId).map((like) => like.post_id),
       savedIds: (saved.data ?? []).map((item) => item.post_id),
-      repostedIds: (reposts.data ?? []).map((item) => item.post_id),
+      repostedIds: (reposts.data ?? []).filter((item) => item.user_id === userId).map((item) => item.post_id),
       followingIds: (follows.data ?? []).filter((follow) => follow.follower_id === userId).map((follow) => follow.following_id),
       readAt: Object.fromEntries((reads.data ?? []).map((row) => [row.peer_id, row.read_at])),
       notificationsReadAt: stateRef.current.notificationsReadAt,
     });
+    const activity: PublicActivity = {
+      likes: (likes.data ?? []) as LikeRow[],
+      follows: (follows.data ?? []) as FollowRow[],
+      reposts: (reposts.data ?? []) as LikeRow[],
+    };
+    setPublicActivity((previous) => JSON.stringify(previous) === JSON.stringify(activity) ? previous : activity);
   }, [replaceState]);
 
   useEffect(() => {
+    if (demoRequested === null) return;
+    setError(null);
     if (mode === 'demo') {
       try {
-        replaceState(restoreDemo(window.localStorage.getItem(STORAGE_KEY)));
+        const restored = restoreDemo(window.localStorage.getItem(STORAGE_KEY), initialDemoState());
+        replaceState(restored);
+        demoHydratedRef.current = true;
+        // Persist added demo content without discarding existing activity.
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
       } catch {
         setError('Browser storage is unavailable. Enable site storage to save demo activity.');
       }
       setLoading(false);
       const onStorage = (event: StorageEvent) => {
-        if (event.key === STORAGE_KEY) replaceState(restoreDemo(event.newValue));
+        if (event.key === STORAGE_KEY && modeRef.current === 'demo') {
+          replaceState(restoreDemo(event.newValue, initialDemoState()));
+          demoHydratedRef.current = true;
+        }
       };
       window.addEventListener('storage', onStorage);
       return () => window.removeEventListener('storage', onStorage);
     }
-    const db = getSupabase();
+    let db: ReturnType<typeof getSupabase>;
+    try { db = getSupabase(); }
+    catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Community connection settings are invalid.');
+      setLoading(false);
+      return;
+    }
     if (!db) return;
+    const client = db;
     let active = true;
-    const load = async (userId: string | null) => {
-      if (!active) return;
-      setLiveIdentity(userId);
+    let authVersion = 0;
+    let channel: RealtimeChannel | null = null;
+    let channelIdentity: string | null | undefined;
+    let realtimeConnected = false;
+    let pollTicks = 0;
+
+    const reportFailure = (cause: unknown) => {
+      if (!active || modeRef.current !== 'live') return;
+      syncErrorRef.current = true;
+      setError(cause instanceof Error ? cause.message : 'Could not load the community.');
+      setSyncStatus('offline');
+    };
+    const queue = createRefreshQueue(async () => {
+      const userId = liveUserId.current;
+      const identityVersion = authVersion;
       try {
         await refreshLive(userId);
+        if (!active || modeRef.current !== 'live' || identityVersion !== authVersion || userId !== liveUserId.current) return;
+        if (syncErrorRef.current) { syncErrorRef.current = false; setError(null); }
+        setSyncStatus(realtimeConnected ? 'live' : 'polling');
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : 'Could not load the community.');
+        if (active && modeRef.current === 'live' && identityVersion === authVersion && userId === liveUserId.current) {
+          reportFailure(cause);
+          throw cause;
+        }
       } finally {
-        if (active) setLoading(false);
+        if (active && identityVersion === authVersion) setLoading(false);
       }
+    });
+    refreshQueueRef.current = queue;
+    const request = (immediate = false) => { void queue.request(immediate).catch(() => {}); };
+
+    const applySession = async (session: Session | null, version: number) => {
+      if (!active || version !== authVersion) return;
+      const userId = session?.user.id ?? null;
+      if (channel && channelIdentity !== userId) {
+        const previousChannel = channel;
+        channel = null;
+        realtimeConnected = false;
+        void client.removeChannel(previousChannel).catch(() => {});
+      }
+      try {
+        // Set the actual authenticated JWT before subscribing. The server still
+        // applies RLS to every public/private INSERT delivered to this channel.
+        await client.realtime.setAuth(session?.access_token ?? null);
+        if (!active || version !== authVersion || modeRef.current !== 'live') return;
+        if (!channel) {
+          const created = client.channel(`turbowatch-community-${userId ?? 'public'}-${version}`);
+          for (const table of ['profiles', 'posts', 'post_likes', 'comments', 'follows', 'reposts']) {
+            created.on('postgres_changes', { event: '*', schema: 'public', table }, () => { if (active && channel === created) request(); });
+          }
+          if (userId) {
+            created.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${userId}` }, () => { if (active && channel === created) request(); });
+            created.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${userId}` }, () => { if (active && channel === created) request(); });
+          }
+          channel = created;
+          channelIdentity = userId;
+          created.subscribe((status) => {
+            if (!active || channel !== created) return;
+            realtimeConnected = status === 'SUBSCRIBED';
+            setSyncStatus(realtimeConnected ? 'live' : 'polling');
+            if (realtimeConnected) request(true);
+          });
+        }
+      } catch {
+        // HTTP synchronization stays available if the socket cannot connect.
+        if (active && version === authVersion) { realtimeConnected = false; setSyncStatus('polling'); }
+      }
+      if (active && version === authVersion) request(true);
     };
-    void db.auth.getSession().then(({ data, error: sessionError }) => {
-      if (sessionError && active) setError(sessionError.message);
-      return load(data.session?.user.id ?? null);
+    const receiveSession = (session: Session | null) => {
+      if (!active || modeRef.current !== 'live') return;
+      const version = ++authVersion;
+      setLiveIdentity(session?.user.id ?? null);
+      // Leave the auth callback before SDK/database work to avoid auth-lock
+      // deadlocks. Version checks discard stale bootstrap/token callbacks.
+      window.setTimeout(() => { void applySession(session, version); }, 0);
+    };
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => receiveSession(session));
+    void client.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!active || authVersion !== 0) return;
+      if (sessionError) reportFailure(sessionError);
+      receiveSession(data.session);
+    }).catch((cause) => {
+      if (!active || authVersion !== 0) return;
+      reportFailure(cause);
+      receiveSession(null);
     });
-    const { data: listener } = db.auth.onAuthStateChange((_event, session) => {
-      // Defer database work outside the auth callback to avoid auth-lock deadlocks.
-      window.setTimeout(() => { void load(session?.user.id ?? null); }, 0);
-    });
-    const channel = db.channel('turbowatch-community')
-      .on('postgres_changes', { event: '*', schema: 'public' }, () => { void load(liveUserId.current); })
-      .subscribe();
+
+    const onVisible = () => { if (document.visibilityState === 'visible') request(true); };
+    const onOnline = () => request(true);
+    const onOffline = () => { if (active) setSyncStatus('offline'); };
+    const poll = window.setInterval(() => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      // Five-second fallback when sockets are unavailable; a slower safety
+      // read also catches private collection/read-marker changes in other tabs.
+      pollTicks += 1;
+      if (!realtimeConnected || pollTicks % 6 === 0) request();
+    }, 5000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     return () => {
       active = false;
+      authVersion += 1;
       refreshGeneration.current += 1;
+      queue.dispose();
+      if (refreshQueueRef.current === queue) refreshQueueRef.current = null;
+      window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
       listener.subscription.unsubscribe();
-      void db.removeChannel(channel);
+      if (channel) void client.removeChannel(channel).catch(() => {});
     };
-  }, [mode, refreshLive, replaceState, setLiveIdentity]);
+  }, [demoRequested, mode, refreshLive, replaceState, setLiveIdentity]);
 
-  const run = async <T,>(action: () => Promise<T> | T): Promise<T> => {
+  const refreshAfterMutation = async (userId: string | null) => {
+    if (modeRef.current !== 'live' || userId !== liveUserId.current) return;
+    if (refreshQueueRef.current) await refreshQueueRef.current.request(true);
+    else await refreshLive(userId);
+  };
+
+  const refreshCommunity = async () => {
+    if (modeRef.current !== 'live') return;
     setError(null);
+    try { await refreshAfterMutation(liveUserId.current); }
+    catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not reconnect to the community.';
+      setError(message);
+      throw new Error(message);
+    }
+  };
+
+  const run = async <T,>(action: () => Promise<T> | T, changesIdentity = false): Promise<T> => {
+    // Hydrate before action closures read profiles/posts or construct updates.
+    // commitDemo repeats this check as a final protection for direct callers.
+    try { ensureDemoHydrated(); }
+    catch {
+      const message = 'Browser storage is unavailable. Enable site storage to save demo activity.';
+      setError(message);
+      throw new Error(message);
+    }
+    const generation = modeGeneration.current;
+    const originalMode = modeRef.current;
+    const originalUserId = stateRef.current.user?.id ?? null;
+    const current = () => generation === modeGeneration.current && originalMode === modeRef.current
+      && (changesIdentity || originalUserId === (stateRef.current.user?.id ?? null));
+    setError(null);
+    syncErrorRef.current = false;
     try {
-      return await action();
+      const result = await action();
+      if (!current()) throw new DOMException('This action belongs to a previous session.', 'AbortError');
+      return result;
     } catch (cause) {
+      if (!current() || (cause instanceof Error && cause.name === 'AbortError')) {
+        throw new DOMException('This action belongs to a previous session.', 'AbortError');
+      }
       const message = cause instanceof Error ? cause.message : 'That change could not be saved. Please try again.';
       setError(message);
       throw new Error(message);
@@ -305,6 +515,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   };
 
   const requireUser = (): Creator => {
+    ensureDemoHydrated();
     const user = stateRef.current.user;
     if (!user) throw new Error('Sign in to join the conversation.');
     return user;
@@ -333,7 +544,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       ? await db.from(table).delete().eq('user_id', user.id).eq('post_id', postId)
       : await db.from(table).insert({ user_id: user.id, post_id: postId });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
   };
 
   const toggleLike = (postId: string) => run(() => toggleRelation('post_likes', 'likedIds', postId));
@@ -357,7 +568,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }
     const { error: failure } = await getSupabase()!.rpc('set_post_saved', { target_post_id: postId, should_save: !removing });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
   });
 
   const toggleFollow = (creatorId: string) => run(async () => {
@@ -377,7 +588,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       ? await db.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId)
       : await db.from('follows').insert({ follower_id: user.id, following_id: creatorId });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
   });
 
   const addComment = (postId: string, text: string) => run(async () => {
@@ -391,7 +602,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }
     const { error: failure } = await getSupabase()!.from('comments').insert({ id: comment.id, post_id: postId, creator_id: user.id, text: clean });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
   });
 
   const createPost = (input: CreatePostInput) => run(async () => {
@@ -417,7 +628,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       category: post.category, tags: post.tags, aspect: post.aspect, duration: post.duration ?? null,
     });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
     return post;
   });
 
@@ -436,7 +647,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }
     const { error: failure } = await getSupabase()!.from('profiles').update({ name: updated.name, username: updated.username, bio: updated.bio, avatar: updated.avatar }).eq('id', user.id);
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
   });
 
   const sendMessage = (recipientId: string, text: string) => run(async () => {
@@ -450,7 +661,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }
     const { error: failure } = await getSupabase()!.from('messages').insert({ id: message.id, sender_id: user.id, recipient_id: recipientId, text: clean });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
   });
 
   const createBoard = (name: string) => run(async () => {
@@ -465,7 +676,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }
     const { error: failure } = await getSupabase()!.from('boards').insert({ id: board.id, user_id: user.id, name: clean });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
     return board;
   });
 
@@ -483,7 +694,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }
     const { error: failure } = await getSupabase()!.rpc('save_post_to_board', { target_post_id: postId, target_board_id: boardId });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
   });
 
   const markConversationRead = (creatorId: string) => run(async () => {
@@ -495,10 +706,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }
     const { error: failure } = await getSupabase()!.from('message_reads').upsert({ user_id: user.id, peer_id: creatorId, read_at: readAt }, { onConflict: 'user_id,peer_id' });
     if (failure) throw new Error(failure.message);
-    await refreshLive(user.id);
+    await refreshAfterMutation(user.id);
   });
 
   const markNotificationsRead = () => {
+    try { ensureDemoHydrated(); }
+    catch { setError('Browser storage is unavailable. Enable site storage to save demo activity.'); return; }
     const next = { ...stateRef.current, notificationsReadAt: new Date().toISOString() };
     if (mode === 'demo') {
       try { commitDemo(() => next); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save read status.'); }
@@ -527,6 +740,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   });
 
   const requireAuthBackend = () => {
+    if (modeRef.current !== 'live') throw new Error('Switch to the community to use a real account. Demo activity stays in this browser.');
     const db = getSupabase();
     if (!db) throw new Error('Real accounts require a connected Supabase project. You can explore all demo features with the demo profile.');
     return db;
@@ -534,36 +748,44 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   const signIn = (email: string, password: string) => run(async () => {
     const db = requireAuthBackend();
+    const generation = modeGeneration.current;
     const { data, error: failure } = await db.auth.signInWithPassword({ email: email.trim(), password });
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
     if (failure) throw new Error(failure.message);
     setLiveIdentity(data.user.id);
-    await refreshLive(data.user.id);
+    await refreshAfterMutation(data.user.id);
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
     setNotice('Welcome back.');
-  });
+  }, true);
 
   const signUp = (email: string, password: string, name: string) => run(async () => {
     const db = requireAuthBackend();
+    const generation = modeGeneration.current;
     const clean = textValue(name, 'Name', 60);
     if (password.length < 8) throw new Error('Use a password with at least 8 characters.');
     const { data, error: failure } = await db.auth.signUp({ email: email.trim(), password, options: { data: { name: clean } } });
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
     if (failure) throw new Error(failure.message);
     if (data.session && data.user) {
       setLiveIdentity(data.user.id);
-      await refreshLive(data.user.id);
+      await refreshAfterMutation(data.user.id);
+      if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
       setNotice('Your account is ready. Make yourself at home.');
     } else setNotice('Check your email to confirm your account, then sign in.');
-  });
+  }, true);
 
   const signOut = () => run(async () => {
     if (mode === 'demo') {
       setNotice('You are exploring a local demo profile. Real accounts are available when a Supabase project is connected.');
       return;
     }
+    const generation = modeGeneration.current;
     const { error: failure } = await getSupabase()!.auth.signOut();
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
     if (failure) throw new Error(failure.message);
     setLiveIdentity(null);
-    await refreshLive(null);
-  });
+    await refreshAfterMutation(null);
+  }, true);
 
   const conversations = useMemo(() => {
     if (!state.user) return [];
@@ -579,14 +801,40 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     if (!state.user) return [];
     const userId = state.user.id;
     const ownPosts = new Set(state.posts.filter((post) => post.creatorId === userId).map((post) => post.id));
-    return state.comments.filter((comment) => comment.creatorId !== userId && ownPosts.has(comment.postId)).map((comment): Notification => ({
-      id: comment.id, creatorId: comment.creatorId, text: `commented: ${comment.text}`, createdAt: comment.createdAt,
+    const items: Notification[] = state.comments.filter((comment) => comment.creatorId !== userId && ownPosts.has(comment.postId)).map((comment) => ({
+      id: `comment:${comment.id}`, creatorId: comment.creatorId, text: `commented: ${comment.text}`, createdAt: comment.createdAt,
       postId: comment.postId, read: comment.createdAt <= state.notificationsReadAt,
-    })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [state.user, state.posts, state.comments, state.notificationsReadAt]);
+    }));
+    if (mode === 'live') {
+      for (const like of publicActivity.likes) {
+        if (like.user_id === userId || !ownPosts.has(like.post_id)) continue;
+        const createdAt = like.created_at ?? EPOCH;
+        items.push({ id: `like:${like.user_id}:${like.post_id}`, creatorId: like.user_id, text: 'liked your post', postId: like.post_id, createdAt, read: createdAt <= state.notificationsReadAt });
+      }
+      for (const repost of publicActivity.reposts) {
+        if (repost.user_id === userId || !ownPosts.has(repost.post_id)) continue;
+        const createdAt = repost.created_at ?? EPOCH;
+        items.push({ id: `repost:${repost.user_id}:${repost.post_id}`, creatorId: repost.user_id, text: 'reposted your post', postId: repost.post_id, createdAt, read: createdAt <= state.notificationsReadAt });
+      }
+      for (const follow of publicActivity.follows) {
+        if (follow.follower_id === userId || follow.following_id !== userId) continue;
+        const createdAt = follow.created_at ?? EPOCH;
+        items.push({ id: `follow:${follow.follower_id}:${userId}`, creatorId: follow.follower_id, text: 'started following you', createdAt, read: createdAt <= state.notificationsReadAt });
+      }
+    }
+    return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [state.user, state.posts, state.comments, state.notificationsReadAt, publicActivity, mode]);
+
+  const publicReposts = useMemo(() => {
+    if (mode === 'demo') return state.user ? { [state.user.id]: state.repostedIds } : {};
+    const result: Record<string, string[]> = {};
+    for (const repost of publicActivity.reposts) (result[repost.user_id] ??= []).push(repost.post_id);
+    return result;
+  }, [mode, state.user, state.repostedIds, publicActivity.reposts]);
 
   return <SocialContext.Provider value={{
     ...state, currentUser: state.user, mode, loading, error, notice, conversations, notifications,
+    publicReposts, syncStatus, refreshCommunity, setDemoMode,
     clearError: () => setError(null), clearNotice: () => setNotice(null),
     toggleLike, toggleSave, toggleRepost, toggleFollow, addComment, createPost, updateProfile,
     sendMessage, createBoard, saveToBoard, markConversationRead, markNotificationsRead,

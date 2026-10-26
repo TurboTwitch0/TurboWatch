@@ -1,28 +1,35 @@
 import { expect, test, type Page } from '@playwright/test';
+import { seedCreators, seedPosts } from '../lib/seed';
 
 const origin = new URL(process.env.TEST_BASE_URL || 'http://127.0.0.1:3000').origin;
 
 async function home(page: Page) {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Stay curious.' })).toBeVisible();
-  await expect(page.locator('.post-card')).toHaveCount(12);
+  await expect(page.locator('.post-card')).toHaveCount(seedPosts.length);
 }
 
 test('discovery feed loads local photography, category filters, and useful search results', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await home(page);
+  expect(seedPosts.length).toBeGreaterThanOrEqual(35);
+  await page.locator('.post-media img').evaluateAll(images => images.forEach(image => { (image as HTMLImageElement).loading = 'eager'; }));
   await expect.poll(() => page.locator('.post-media img').evaluateAll(images => images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  await expect(page.locator('.post-media img[src*="media-unavailable"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Food', exact: true }).click();
-  await expect(page.locator('.post-card')).toHaveCount(2);
+  await expect(page.locator('.post-card')).toHaveCount(seedPosts.filter(post => post.category === 'Food').length);
   await page.getByRole('button', { name: 'For you', exact: true }).last().click();
-  await expect(page.locator('.post-card')).toHaveCount(12);
+  await expect(page.locator('.post-card')).toHaveCount(seedPosts.length);
   await page.getByRole('textbox', { name: 'Search TurboWatch' }).fill('golden');
-  await expect(page.locator('.post-card')).toHaveCount(2);
+  const goldenFinds = seedPosts.filter(post => `${post.title} ${post.description} ${post.tags.join(' ')} ${seedCreators.find(creator => creator.id === post.creatorId)?.name || ''}`.toLowerCase().includes('golden'));
+  expect(goldenFinds.length).toBeGreaterThan(0);
+  await expect(page.locator('.post-card')).toHaveCount(goldenFinds.length);
+  for (const post of goldenFinds) await expect(page.getByRole('button', { name: post.title, exact: true })).toBeVisible();
   await page.getByRole('textbox', { name: 'Search TurboWatch' }).fill('no-such-find-91871');
   await expect(page.getByRole('heading', { name: 'Nothing here just yet.' })).toBeVisible();
   await page.getByRole('button', { name: 'Clear search', exact: true }).click();
-  await expect(page.locator('.post-card')).toHaveCount(12);
+  await expect(page.locator('.post-card')).toHaveCount(seedPosts.length);
   await expect(page.locator('body')).not.toContainText('Application error');
   expect(errors).toEqual([]);
 });
@@ -117,9 +124,15 @@ test('messages send once and survive reload without a fabricated reply', async (
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await expect(page.locator('.message-bubble')).toHaveCount(initialCount + 1);
   await expect(page.locator('.message-bubble.outgoing').filter({ hasText: 'Let’s plan a creative weekend — browser test.' })).toBeVisible();
+  const storedMessages = () => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('turbowatch:demo:v1')!);
+    return state.messages.filter((message: { text: string }) => message.text === 'Let’s plan a creative weekend — browser test.');
+  });
+  expect(await storedMessages()).toHaveLength(1);
   await page.reload();
   await expect(page.locator('.message-bubble')).toHaveCount(initialCount + 1);
   await expect(page.locator('.message-bubble.outgoing').filter({ hasText: 'Let’s plan a creative weekend — browser test.' })).toBeVisible();
+  expect(await storedMessages()).toHaveLength(1);
 });
 
 test('publishing a photo creates a persistent post and profile entry', async ({ page }) => {
@@ -141,20 +154,24 @@ test('publishing a photo creates a persistent post and profile entry', async ({ 
   await expect(page.getByRole('button', { name: 'My creative corner', exact: true })).toBeVisible();
 });
 
-test('both local videos decode and play in the watch experience', async ({ page }) => {
-  for (const [id, title, minimumDuration] of [
-    ['coast-escape', 'Take the scenic route.', 30],
-    ['mountain-morning', 'Some places make you feel small.', 10],
-  ] as const) {
-    await page.goto(`/?post=${id}`);
-    const video = page.getByRole('dialog', { name: title, exact: true }).locator('video');
-    await expect(video).toBeVisible();
-    await expect.poll(() => video.evaluate(element => (element as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
-    await expect.poll(() => video.evaluate(element => (element as HTMLVideoElement).duration)).toBeGreaterThan(minimumDuration);
-    await video.evaluate(async element => { const media = element as HTMLVideoElement; media.muted = true; await media.play(); });
-    await expect.poll(() => video.evaluate(element => (element as HTMLVideoElement).currentTime)).toBeGreaterThan(0);
-    expect(await video.evaluate(element => (element as HTMLVideoElement).error)).toBeNull();
-    expect(await video.evaluate(element => (element as HTMLVideoElement).videoWidth)).toBeGreaterThan(0);
+test('all twelve distinct demo videos decode and play in the watch experience', async ({ page }) => {
+  test.setTimeout(120_000);
+  const videos = seedPosts.filter(post => post.mediaType === 'video');
+  expect(videos).toHaveLength(12);
+  expect(new Set(videos.map(post => post.mediaUrl)).size).toBe(videos.length);
+  for (const post of videos) {
+    await test.step(`Play ${post.title}`, async () => {
+      await page.goto(`/?demo=1&post=${encodeURIComponent(post.id)}`);
+      const video = page.getByRole('dialog', { name: post.title, exact: true }).locator('video');
+      await expect(video).toBeVisible();
+      await expect(video).toHaveAttribute('src', post.mediaUrl);
+      await expect.poll(() => video.evaluate(element => (element as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
+      await expect.poll(() => video.evaluate(element => (element as HTMLVideoElement).duration)).toBeGreaterThan(0.5);
+      await video.evaluate(async element => { const media = element as HTMLVideoElement; media.muted = true; await media.play(); });
+      await expect.poll(() => video.evaluate(element => (element as HTMLVideoElement).currentTime)).toBeGreaterThan(0.05);
+      expect(await video.evaluate(element => (element as HTMLVideoElement).error)).toBeNull();
+      expect(await video.evaluate(element => (element as HTMLVideoElement).videoWidth)).toBeGreaterThan(0);
+    });
   }
 });
 

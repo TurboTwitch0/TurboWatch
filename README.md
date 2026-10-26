@@ -15,6 +15,14 @@ npm run dev
 
 The app runs on port 3000. No account or external service is needed to try the demo. Demo activity is stored in this browser; accounts and conversations in the demo are fictional. Shared demo links open seeded posts in other browsers; your uploaded demo content remains local.
 
+### Expanded demo
+
+The demo includes **40 posts: 12 shorts and 28 photo posts**, **14 fictional creators**, **7 collections**, **45 sample comments**, and **26 sample messages across 8 conversations**. The demo profile has its own posts. All images, clips, and fonts are bundled locally; credits and licenses are linked from the footer.
+
+Use `/?demo=1` or **Explore demo** to try it even when a Supabase project is connected but still being set up. **Exit demo** returns to the shared community. Switching modes and navigating within the app do not reload the page. Demo activity stays in this browser and is separate from real accounts. Returning demo visitors automatically receive new sample content while keeping their own uploads, edits, likes, unsaves, comments, messages, and collections.
+
+Shorts support the previous/next controls, keyboard arrows, and vertical swipes. The category row includes all available categories, including Art and Music.
+
 ### Included
 
 - Photo and video feed, search, category filters, creator discovery, and a dedicated shorts player.
@@ -62,6 +70,14 @@ This error means the Supabase Data API cannot resolve the table in its schema ca
 
 Applying the database schema or refreshing its API cache takes effect without a Vercel redeployment. Changing a `NEXT_PUBLIC_` URL or key requires a new app build because Next.js embeds those values at build time. Never paste database passwords or service-role keys into the app or a support message.
 
+## Shared interactions without page refreshes
+
+With the Supabase setup complete, signed-in users share real posts, likes, comments, follows, reposts, and direct messages. Post owners receive activity notifications, and reposts appear on public profiles. Saved posts and collections remain private; messages are visible only to their participants.
+
+The client subscribes using the current account's authenticated Realtime session. Incoming changes update in place. If the socket is unavailable, a visible tab checks for updates every five seconds; reconnecting or returning to the tab also refreshes its data in the background. Bursts of events are combined to avoid overlapping reads. Feed cards and unchanged records retain their identities, so social updates preserve the document, playing media, scroll, focused inputs, and unfinished drafts. The inbox keeps the selected conversation and a draft for each person; incoming messages do not force you to the bottom while you are reading older messages.
+
+The repository's database access policies still control who can read or write each record. Browser-local demo interactions do not reach real people. Hosted Supabase connectivity requires your project's setup and cannot be established by the local integration tests alone.
+
 ## Deploy to Vercel
 
 Click [Deploy to Vercel](https://vercel.com/new/git/external?repository-url=https%3A%2F%2Fgithub.com%2FTurboTwitch0%2FTurboWatch) to import this GitHub repository into your Vercel account. If Vercel asks for GitHub access, allow access to `TurboTwitch0/TurboWatch`.
@@ -82,6 +98,7 @@ You can also deploy with Vercel CLI from this directory using your own authentic
 ```sh
 npm run typecheck
 npm run test:schema
+npm run test:demo
 npm run test:e2e
 npm run build
 npm start
@@ -89,9 +106,26 @@ npm start
 
 The database test runs PostgreSQL locally in isolated PGlite memory. It applies the actual schema twice and runs 25 checks for ownership, private messaging, collection isolation, uploads, profile verification restrictions, and atomic saves. It does not contact a Supabase project.
 
-The nine Playwright tests cover search/filtering, persisted likes/saves, comments/reposts/share links, collections, profile editing, direct messages, publishing, real video playback, and mobile navigation. The runner starts the app automatically when needed. It uses system Chromium when available; otherwise install Playwright Chromium using `npx playwright install chromium`. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to use another local Chromium installation. Set `TEST_BASE_URL` to test an already running server, for example `TEST_BASE_URL=http://127.0.0.1:3001 npm run test:e2e`.
+Playwright covers search/filtering, persisted likes/saves, comments/reposts/share links, collections, profile editing, direct messages, publishing, all 12 video files, mobile navigation, demo upgrades, keyboard/swipe shortcuts, and preservation of media/scroll/drafts across interactions. The nine Node demo-state tests check migration of older browser data without losing user activity. The runner starts the app automatically when needed. It uses system Chromium when available; otherwise install Playwright Chromium with `npx playwright install chromium`. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for another local Chromium installation, or `TEST_BASE_URL` to test an already running server.
 
-Verified during development: production build, TypeScript, all 25 database checks, all nine browser tests, and both local videos. Live Supabase connectivity and public Vercel deployment require your project configuration and have not been verified.
+The opt-in `tests/live-sync.spec.ts` uses two isolated signed-in browser contexts, the actual Supabase client SDK, and a controlled local HTTP fixture. It checks recipient notifications, shared publishing, bidirectional private messages, polling recovery, and preservation of the receiver's document/video/draft. Its fixture deliberately refuses Realtime sockets. It does **not** connect to hosted Supabase or substitute for the separate PostgreSQL policy tests. To run it, start a separate app instance using only these test values:
+
+```sh
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:4400 \
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_turbowatch_local_fixture \
+npm run dev -- --port 3002
+```
+
+Then run:
+
+```sh
+TEST_BASE_URL=http://127.0.0.1:3002 LIVE_TEST_BASE_URL=http://127.0.0.1:3002 \
+npm run test:e2e -- tests/live-sync.spec.ts
+```
+
+The test starts and stops its local API fixture. These values are test-only public placeholders, not real project credentials. Keep them out of production settings.
+
+Verified during development: production build, TypeScript, all 25 database checks, the browser workflows, the two-account local integration, the demo-state migration tests, and all 12 local videos. Live Supabase connectivity and public Vercel deployment require your project configuration and have not been verified.
 
 ## Project map
 

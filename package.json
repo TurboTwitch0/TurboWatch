@@ -8,7 +8,8 @@
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "test:schema": "node tests/schema.mjs"
+    "test:schema": "node tests/schema.mjs",
+    "test:demo": "node tests/demo-state.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.0",

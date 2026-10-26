@@ -5,55 +5,157 @@ import { createPortal } from 'react-dom';
 import { ArrowUpRight, Check, Copy, Film, FolderHeart, ImagePlus, Link, LoaderCircle, Mail, Send, Sparkles, UploadCloud, X } from 'lucide-react';
 import type { Post } from '@/lib/model';
 import { useSocial } from '@/lib/store';
+import { sitePath } from '@/lib/navigation';
 
 type CloseProps = { onClose: () => void };
+
+type ActiveDialog = {
+  panel: HTMLDivElement;
+  backdrop: HTMLDivElement;
+  close: () => void;
+  restoreFocus: HTMLElement | null;
+  restoreOwner?: ActiveDialog;
+};
+
+// Keep one keyboard/focus owner even when a dialog opens another dialog.
+const activePanels: ActiveDialog[] = [];
+let bodyOverflow: { value: string; priority: string } | null = null;
+
+function focusableElements(panel: HTMLElement): HTMLElement[] {
+  return Array.from(panel.querySelectorAll<HTMLElement>(
+    'a[href], button, input:not([type="hidden"]), select, textarea, video[controls], audio[controls], [contenteditable="true"], [tabindex]'
+  )).filter(element => element.tabIndex >= 0 && !element.matches(':disabled') && !element.closest('[inert]') && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden');
+}
+
+function focusDialog(entry: ActiveDialog, preferred?: HTMLElement | null) {
+  const autofocus = entry.panel.querySelector<HTMLElement>('[data-autofocus]');
+  const target = preferred?.isConnected && entry.panel.contains(preferred)
+    ? preferred
+    : autofocus && autofocus.getClientRects().length > 0 && !autofocus.matches(':disabled')
+      ? autofocus
+      : focusableElements(entry.panel)[0] ?? entry.panel;
+  target.focus({ preventScroll: true });
+}
+
+function syncDialogStack() {
+  const top = activePanels.at(-1);
+  // Activate the new top before moving focus out of an underlying panel.
+  if (top) {
+    top.panel.inert = false;
+    top.backdrop.inert = false;
+    top.panel.removeAttribute('aria-hidden');
+    top.panel.setAttribute('aria-modal', 'true');
+  }
+  for (const [index, entry] of activePanels.entries()) {
+    const isTop = entry === top;
+    entry.backdrop.style.zIndex = String(1000 + index);
+    if (!isTop) {
+      entry.panel.inert = true;
+      entry.backdrop.inert = true;
+      entry.panel.setAttribute('aria-hidden', 'true');
+      entry.panel.setAttribute('aria-modal', 'false');
+    }
+  }
+}
+
+function handleDialogKeyDown(event: KeyboardEvent) {
+  const top = activePanels.at(-1);
+  if (!top) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!event.repeat) top.close();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const elements = focusableElements(top.panel);
+  if (!elements.length) { event.preventDefault(); top.panel.focus({ preventScroll: true }); return; }
+  const first = elements[0];
+  const last = elements[elements.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey && (active === first || !elements.includes(active as HTMLElement))) {
+    event.preventDefault(); last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && (active === last || !elements.includes(active as HTMLElement))) {
+    event.preventDefault(); first.focus({ preventScroll: true });
+  }
+}
+
+function handleDialogFocus(event: FocusEvent) {
+  const top = activePanels.at(-1);
+  if (top && event.target instanceof Node && !top.panel.contains(event.target)) focusDialog(top);
+}
+
+function registerDialog(entry: ActiveDialog) {
+  entry.restoreOwner = activePanels.find(candidate => !!entry.restoreFocus && candidate.panel.contains(entry.restoreFocus));
+  if (!activePanels.length) {
+    bodyOverflow = { value: document.body.style.getPropertyValue('overflow'), priority: document.body.style.getPropertyPriority('overflow') };
+    document.body.style.setProperty('overflow', 'hidden');
+    document.addEventListener('keydown', handleDialogKeyDown, true);
+    document.addEventListener('focusin', handleDialogFocus, true);
+  }
+  activePanels.push(entry);
+  // Focus the new dialog before hiding the previously focused panel from AT.
+  entry.panel.inert = false;
+  entry.backdrop.inert = false;
+  entry.panel.removeAttribute('aria-hidden');
+  focusDialog(entry);
+  syncDialogStack();
+  return () => {
+    const index = activePanels.indexOf(entry);
+    if (index < 0) return;
+    const wasTop = index === activePanels.length - 1;
+    activePanels.splice(index, 1);
+    // A parent can unmount first. Its child's final focus target must survive it.
+    for (const remaining of activePanels) {
+      if (remaining.restoreOwner === entry || (remaining.restoreFocus && entry.panel.contains(remaining.restoreFocus))) {
+        remaining.restoreFocus = entry.restoreFocus;
+        remaining.restoreOwner = entry.restoreOwner;
+      }
+    }
+    entry.panel.inert = false;
+    entry.backdrop.inert = false;
+    entry.panel.removeAttribute('aria-hidden');
+    entry.panel.removeAttribute('aria-modal');
+    entry.backdrop.style.removeProperty('z-index');
+    syncDialogStack();
+    const top = activePanels.at(-1);
+    if (!top) {
+      document.removeEventListener('keydown', handleDialogKeyDown, true);
+      document.removeEventListener('focusin', handleDialogFocus, true);
+      if (bodyOverflow?.value) document.body.style.setProperty('overflow', bodyOverflow.value, bodyOverflow.priority);
+      else document.body.style.removeProperty('overflow');
+      bodyOverflow = null;
+      if (wasTop && entry.restoreFocus?.isConnected) entry.restoreFocus.focus({ preventScroll: true });
+    } else if (wasTop) focusDialog(top, entry.restoreFocus);
+  };
+}
 
 export function Dialog({ title, onClose, children, className = '' }: CloseProps & { title: string; children: ReactNode; className?: string }) {
   const [mounted, setMounted] = useState(false);
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
-    if (!mounted) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const focusable = () => Array.from(panel.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]'
-    ) ?? []).filter(element => element.getClientRects().length > 0);
-    const first = panel.current?.querySelector<HTMLElement>('[data-autofocus]') ?? focusable()[0] ?? panel.current;
-    first?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); close.current(); }
-      if (event.key !== 'Tab') return;
-      const elements = focusable();
-      if (!elements.length) { event.preventDefault(); panel.current?.focus(); return; }
-      const firstElement = elements[0];
-      const lastElement = elements[elements.length - 1];
-      if (event.shiftKey && (document.activeElement === firstElement || !panel.current?.contains(document.activeElement))) {
-        event.preventDefault(); lastElement.focus();
-      } else if (!event.shiftKey && (document.activeElement === lastElement || !panel.current?.contains(document.activeElement))) {
-        event.preventDefault(); firstElement.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', onKeyDown);
-      previousFocus?.focus();
-    };
+    if (!mounted || !panel.current || !backdrop.current) return;
+    return registerDialog({
+      panel: panel.current,
+      backdrop: backdrop.current,
+      close: () => close.current(),
+      restoreFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    });
   }, [mounted]);
 
   if (!mounted) return null;
   return createPortal(
-    <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="dialog-backdrop" ref={backdrop} onMouseDown={event => { if (event.target === event.currentTarget && activePanels.at(-1)?.panel === panel.current) close.current(); }}>
       <div className={`dialog-panel ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={panel} tabIndex={-1}>
         <header className="dialog-header">
           <h2 id={titleId}>{title}</h2>
-          <button type="button" className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={21} /></button>
+          <button type="button" className="icon-button" aria-label="Close dialog" onClick={() => { if (activePanels.at(-1)?.panel === panel.current) close.current(); }}><X size={21} /></button>
         </header>
         {children}
       </div>
@@ -62,6 +164,7 @@ export function Dialog({ title, onClose, children, className = '' }: CloseProps 
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.name === 'AbortError') return '';
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
 
@@ -280,10 +383,7 @@ export function ShareDialog({ post, onClose }: CloseProps & { post: Post }) {
   const [nativeShare, setNativeShare] = useState(false);
   const linkInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const link = new URL(window.location.href);
-    link.search = '';
-    link.hash = '';
-    link.searchParams.set('post', post.id);
+    const link = new URL(sitePath({ post: post.id }, window.location.search), window.location.origin);
     setUrl(link.toString());
     setNativeShare(typeof navigator.share === 'function');
   }, [post.id]);
