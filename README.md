@@ -31,7 +31,7 @@ Shorts support the previous/next controls, keyboard arrows, and vertical swipes.
 - Likes, comments, reposts, native sharing or copyable post links, and following creators.
 - Private saved collections, profile editing, photo/video publishing, and direct messages.
 - Responsive layouts, keyboard navigation, accessible dialogs, reduced-motion support, and locally bundled media/fonts.
-- Real email/password registration and sign-in, unique profiles, persisted sessions, confirmation-email handling and resending, and Supabase-backed shared data. A separate explicit sample URL is available for development.
+- Real email/password registration and sign-in, unique profiles, persisted sessions, confirmation-email handling and resending, password recovery, and Supabase-backed shared data. A separate explicit sample URL is available for development.
 
 Demo uploads allow files up to 2 MB, subject to the browser's storage quota. Larger videos can use hosted URLs. Community uploads allow up to 50 MB. Uploads and posts are public; message text and collections are private to their participants/owners.
 
@@ -74,15 +74,19 @@ This error means the Supabase Data API cannot resolve the table in its schema ca
 
 Applying the database schema or refreshing its API cache takes effect without a Vercel redeployment. Changing a `NEXT_PUBLIC_` URL or key requires a new app build because Next.js embeds those values at build time. Never paste database passwords or service-role keys into the app or a support message.
 
+## Account recovery
+
+Use **Forgot password?** on sign-in to request a real Supabase reset email. The reset screen supports password confirmation, show/hide controls, recoverable errors, and refresh in the same tab. A valid recovery session is required before changing a password; an expired link or an unrelated existing account cannot authorize a reset. Set the deployed `/?auth=recovery` URL in Supabase’s allowed redirects as described in [the setup guide](supabase/SETUP.md). The account menu exposes sign-out from every view, including when the account is authenticated but its profile cannot be loaded.
+
 ## Search
 
-Search finds published posts by title, description, category, tags (including `#tag`), and creator name or `@username`. Matching people appear above the post results. Searches ignore case and accents and support multiple words. Changing the search clears a stale category filter. The `q` URL parameter preserves the query when you reload or share a search link, and browser back/forward restores it without refreshing the document. Search on the normal site reads the loaded shared feed (up to the latest 200 posts) and available public profiles. Explicit sample-mode searches stay within the fictional library.
+Search finds published posts by title, description, category, tags (including `#tag`), and creator name or `@username`. Matching people appear above the post results. Searches ignore case and accents and support multiple words. Changing the search clears a stale category filter. Use **All posts / Photos / Videos** and **Recommended / Newest / Most liked** to narrow the loaded feed. Category, media, and sort choices are preserved in the URL and restored by reload/back/forward. The `q` URL parameter preserves the query when you reload or share a search link, and browser back/forward restores it without refreshing the document. Search on the normal site reads the loaded shared feed (up to the latest 200 posts) and available public profiles. Explicit sample-mode searches stay within the fictional library.
 
 ## Shared interactions without page refreshes
 
 With the Supabase setup complete, signed-in users share real posts, likes, comments, follows, reposts, and direct messages. Post owners receive activity notifications, and reposts appear on public profiles. Saved posts and collections remain private; messages are visible only to their participants.
 
-The client subscribes using the current account's authenticated Realtime session. Incoming changes update in place. If the socket is unavailable, a visible tab checks for updates every five seconds; reconnecting or returning to the tab also refreshes its data in the background. Bursts of events are combined to avoid overlapping reads. Feed cards and unchanged records retain their identities, so social updates preserve the document, playing media, scroll, focused inputs, and unfinished drafts. The inbox keeps the selected conversation and a draft for each person; incoming messages do not force you to the bottom while you are reading older messages.
+The client subscribes using the current account's authenticated Realtime session. Incoming changes update in place. If the socket is unavailable, a visible tab checks for updates every five seconds; reconnecting or returning to the tab also refreshes its data in the background. Bursts of events are combined to avoid overlapping reads. Feed cards and unchanged records retain their identities, so social updates preserve the document, playing media, scroll, focused inputs, and unfinished drafts. The short player retains the selected video by ID when new posts arrive, preserving playback. Account changes clear recent activity and unfinished comments, and private Saved posts are never shown on another creator’s profile after browser navigation. The inbox keeps the selected conversation and a draft for each person; incoming messages do not force you to the bottom while you are reading older messages.
 
 The repository's database access policies still control who can read or write each record. Browser-local demo interactions do not reach real people. Hosted Supabase connectivity requires your project's setup and cannot be established by the local integration tests alone.
 
@@ -128,12 +132,12 @@ Then run:
 
 ```sh
 TEST_BASE_URL=http://127.0.0.1:3002 LIVE_TEST_BASE_URL=http://127.0.0.1:3002 \
-npm run test:e2e -- tests/live-sync.spec.ts
+npm run test:e2e -- tests/live-sync.spec.ts tests/account-recovery.spec.ts
 ```
 
 The test starts and stops its local API fixture. These values are test-only public placeholders, not real project credentials. Keep them out of production settings.
 
-Verified during development: production build, TypeScript, all 40 database checks, the browser workflows, the two-account local integration, the demo-state migration tests, and all 12 local videos. Live Supabase connectivity and public Vercel deployment require your project configuration and have not been verified.
+The latest account/discovery improvement pass verified the production build and TypeScript, 19 production browser workflows, 10 controlled SDK authentication/synchronization cases, and responsive layouts at 320, 390, 768, and 1440 pixels. Earlier validation also covered the unchanged database schema’s 40 access checks, demo-state migration, and all 12 local videos. Live Supabase connectivity and public Vercel deployment require your project configuration and have not been verified.
 
 ## Project map
 
@@ -142,6 +146,7 @@ Verified during development: production build, TypeScript, all 40 database check
 - `components/Dialogs.tsx` — publishing, profile, authentication, collections, and sharing forms.
 - `lib/store.tsx` — persistent demo and Supabase adapters.
 - `lib/search.ts` — post, creator, username, and tag matching.
+- `supabase/verify.sql` — read-only project installation diagnostics.
 - `supabase/SETUP.md` — real-account configuration and repair steps.
 - `lib/seed.ts` — fictional demo content.
 - `supabase/schema.sql` — shared backend and row-level access policies.

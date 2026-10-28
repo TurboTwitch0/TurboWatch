@@ -4,6 +4,10 @@ Use **one Supabase project for the whole site**. Every person signs up with thei
 
 This setup creates no demo accounts, sample posts, or shared Alex Carter login. Old activity from the browser demo was local and was never published to Supabase. Sign in with a real account and publish any posts you want other people to see.
 
+## Check the existing project first
+
+If you already have a Supabase project, compare its Project URL with the URL configured for your existing Vercel app. A generic project name or a similar table name does not establish that it belongs to this app. Do not point the site at another project or install the schema until that match is verified. [verify.sql](verify.sql) contains read-only metadata checks for the expected tables, columns, signup trigger, row-level policies, Realtime publication, and media bucket; it does not return user content or change access.
+
 ## 1. Run the updated database setup
 
 These steps apply to both a **new project** and a project where you ran an earlier TurboWatch setup.
@@ -24,10 +28,12 @@ In **Authentication**:
 1. Under **Sign In / Providers → Email**, enable the Email provider. Ensure **Allow new users to sign up** is enabled in your authentication settings.
 2. Keep **Confirm email** enabled for public signup. A new user must follow the email confirmation link before signing in. If you deliberately turn confirmation off, Supabase can sign them in immediately after signup instead.
 3. Under **URL Configuration**, set **Site URL** to the actual public site origin, for example `https://your-site.vercel.app`.
-4. Add that origin with a trailing slash, for example `https://your-site.vercel.app/`, to **Redirect URLs**. Add your custom domain too if you use one. For local development, you can also add `http://localhost:3000/`.
+4. Add that origin with a trailing slash, for example `https://your-site.vercel.app/`, to **Redirect URLs**. Add `https://your-site.vercel.app/?auth=recovery` as an allowed redirect for password reset emails. Add the equivalent URLs for your custom domain too if you use one. For local development, you can also add `http://localhost:3000/` and `http://localhost:3000/?auth=recovery`.
 5. Leave the confirmation email template's link as `{{ .ConfirmationURL }}` unless you are intentionally customizing your auth flow. This app handles Supabase's normal email confirmation redirect.
 
 For a public launch, configure your own SMTP provider under Authentication's email settings. Supabase's default email sender has delivery restrictions and rate limits; it is intended for trying authentication. The dashboard's authentication logs explain rejected signups, confirmation failures, and email rate limits.
+
+The sign-in form includes **Forgot password?**. Supabase sends the reset email; opening a valid link shows **Choose a new password**. The app verifies that the recovery session belongs to that account before updating the password. Expired or invalid links offer a fresh reset email. Reloading a valid recovery screen in the same tab preserves the flow; a plain `?auth=recovery` URL alone never authorizes a password change.
 
 Do not enable anonymous sign-in as a substitute for user accounts. This app uses email/password authentication.
 
@@ -92,6 +98,7 @@ Supabase's Data API must be enabled with `public` in its exposed schemas. The sc
 - **“Database error saving new user” or a missing profile after sign-in**: rerun the complete updated SQL file. It replaces the signup trigger and repairs profiles for earlier accounts. Check Authentication logs if a signup still fails.
 - **“Email not confirmed”**: open the confirmation email for that address and follow its link before signing in. Use **Resend confirmation email** on the sign-in form or check-email screen if necessary. Check spam and the project's email delivery/authentication logs.
 - **An expired or invalid confirmation link**: the app shows a confirmation error. If your email is already verified, sign in. Otherwise enter your account email on the sign-in form and choose **Resend confirmation email**, then use the newest link.
+- **Password reset link does not return to the app**: allow your site’s exact `/?auth=recovery` URL under Authentication → URL Configuration. Keep the Reset Password email template pointed at `{{ .ConfirmationURL }}`. Use the newest reset email; an ordinary signed-in session cannot replace a recovery link.
 - **No confirmation email arrives**: check the project's Email provider, confirmation settings, SMTP setup, and rate-limit logs. Supabase must be allowed to send to the email address you used.
 - **“Invalid login credentials”**: use the email/password created in this same Supabase project. A local demo profile is not an account. Confirm the email and check that Vercel points at the expected project.
 - **Everyone still appears as Alex Carter / old demo posts appear**: open the normal site address without `?demo=1`, ensure both public environment variables exist, and deploy the latest GitHub code after setting them. Signing in must show the name on your own account. Existing real accounts can update their name under **Edit profile**.

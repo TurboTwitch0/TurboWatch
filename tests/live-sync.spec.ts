@@ -17,7 +17,7 @@ test.afterAll(async () => { await fixture?.close(); });
 
 async function signIn(page: Page, user: typeof fixtureUsers.alice) {
   await page.goto(liveBaseUrl!);
-  await page.getByRole('button', { name: 'View your profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Good to have you back.', exact: true });
   await dialog.getByRole('textbox', { name: 'Email address', exact: true }).fill(user.email);
   await dialog.getByLabel('Password', { exact: true }).fill(fixturePassword);
@@ -133,6 +133,30 @@ test('controlled Supabase API: two isolated accounts see social updates and noti
     await search.fill('@alice_fixture');
     await expect(bob.locator('.creator-chip').filter({ hasText: 'Alice Fixture' })).toBeVisible();
     expect(fixture.tables.posts.some(post => post.title === 'A photo shared with Bob' && post.creator_id === fixtureUsers.alice.id)).toBe(true);
+
+    // Incoming uploads must not replace a short that someone is already watching.
+    await bob.evaluate(name => { document.documentElement.dataset.liveDocument = name; }, fixtureUsers.bob.name);
+    await bob.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Shorts', exact: true }).click();
+    const playing = bob.locator('.short-player video');
+    await expect.poll(() => playing.evaluate(node => (node as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
+    await playing.evaluate(async node => {
+      const video = node as HTMLVideoElement;
+      video.dataset.incomingShort = 'keep-watching-this-short';
+      video.muted = true; video.currentTime = 2; await video.play();
+    });
+    await alice.getByRole('dialog', { name: 'A photo shared with Bob', exact: true }).getByRole('button', { name: 'Close dialog', exact: true }).click();
+    await alice.getByRole('button', { name: 'Create', exact: true }).click();
+    const upload = alice.getByRole('dialog', { name: 'Make something worth sharing.', exact: true });
+    await upload.getByRole('button', { name: 'Video', exact: true }).click();
+    await upload.getByRole('textbox', { name: /Or use a video link/ }).fill(`${new URL(liveBaseUrl!).origin}/media/clip-city.mp4`);
+    await upload.getByRole('textbox', { name: 'Title', exact: true }).fill('A new short arrives while Bob watches');
+    await upload.getByRole('button', { name: 'Publish post', exact: true }).click();
+    await expect(alice.getByRole('dialog', { name: 'A new short arrives while Bob watches', exact: true })).toBeVisible();
+    await expect(bob.locator('.shorts-counter')).toContainText('/ 02', { timeout: 20_000 });
+    await expect(playing).toHaveAttribute('data-incoming-short', 'keep-watching-this-short');
+    await expect(playing).toHaveAttribute('src', `${new URL(liveBaseUrl!).origin}/media/coast.mp4`);
+    expect(await playing.evaluate(node => (node as HTMLVideoElement).currentTime)).toBeGreaterThan(2);
+    expect(await bob.evaluate(() => document.documentElement.dataset.liveDocument)).toBe(fixtureUsers.bob.name);
   } finally {
     await aliceContext.close();
     await bobContext.close();
@@ -157,6 +181,25 @@ test('real authentication rejects bad passwords and never substitutes a demo pro
   await expect(dialog).toBeHidden();
   await expect(page.locator('.account-button strong')).toHaveText(fixtureUsers.alice.name);
   expect(fixture.requests.some(request => request.path === '/auth/v1/token' && request.method === 'POST')).toBe(true);
+  await page.getByRole('button', { name: 'Account menu', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Your account', exact: true }).getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.locator('.account-button strong')).toHaveText('Join the community');
+});
+
+test('signing out in another tab removes the old account and clears its unfinished comment', async ({ page, context }) => {
+  await signIn(page, fixtureUsers.alice);
+  await page.getByRole('button', { name: 'Open A shared coastline', exact: true }).click();
+  const detail = page.getByRole('dialog', { name: 'A shared coastline', exact: true });
+  await detail.getByRole('textbox', { name: 'Write a comment', exact: true }).fill('A private unfinished draft from Alice.');
+  const secondTab = await context.newPage();
+  await secondTab.goto(liveBaseUrl!);
+  await expect(secondTab.locator('.account-button strong')).toHaveText(fixtureUsers.alice.name);
+  await secondTab.getByRole('button', { name: 'Account menu', exact: true }).click();
+  await secondTab.getByRole('navigation', { name: 'Your account', exact: true }).getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.locator('.account-button strong')).toHaveText('Join the community');
+  await expect(detail.getByRole('textbox', { name: 'Write a comment', exact: true })).toHaveValue('');
+  expect(fixture.tables.comments.some(comment => comment.text === 'A private unfinished draft from Alice.')).toBe(false);
+  await secondTab.close();
 });
 
 test('a new signup gets its own profile, persists its session, publishes publicly, and signs out cleanly', async ({ browser }) => {

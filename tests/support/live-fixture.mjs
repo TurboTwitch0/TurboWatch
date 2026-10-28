@@ -31,6 +31,10 @@ export async function startSupabaseFixture({ port = 4400, appOrigin = 'http://12
   const users = Object.values(fixtureUsers).map(user => ({ ...user, password: fixturePassword, confirmed: true }));
   let requireEmailConfirmation = false;
   let rejectNextResend = false;
+  let rejectNextRecovery = false;
+  let rejectNextPasswordUpdate = false;
+  const recoveryRequests = [];
+  const passwordUpdates = [];
   /** @type {Record<string, Array<Record<string, unknown>>>} */
   const tables = {
     profiles: Object.values(fixtureUsers).map(user => ({ id: user.id, name: user.name, username: user.username, avatar: `${appOrigin}/media/avatar-${user === fixtureUsers.alice ? 'alex' : 'theo'}.svg`, bio: 'A controlled local integration-test account.', verified: false, cover: '', created_at: '2026-10-25T12:00:00.000Z' })),
@@ -86,7 +90,7 @@ export async function startSupabaseFixture({ port = 4400, appOrigin = 'http://12
     const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
     const user = userForRequest(request);
     response.setHeader('Access-Control-Allow-Origin', '*');
-    response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+    response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     response.setHeader('Access-Control-Allow-Headers', 'authorization,apikey,content-type,prefer,x-client-info,x-supabase-api-version,accept-profile,content-profile,x-retry-count');
     response.setHeader('Access-Control-Expose-Headers', 'content-range');
     response.setHeader('Content-Type', 'application/json');
@@ -118,11 +122,27 @@ export async function startSupabaseFixture({ port = 4400, appOrigin = 'http://12
         if (!candidate.confirmed) { reply(400, { code: 'email_not_confirmed', msg: 'Email not confirmed' }); return; }
         reply(200, session(candidate)); return;
       }
-      if (url.pathname === '/auth/v1/user') { reply(user ? 200 : 401, user ? authUser(user) : { message: 'No fixture session.' }); return; }
+      if (url.pathname === '/auth/v1/user') {
+        if (!user) { reply(401, { code: 'bad_jwt', msg: 'This recovery session has expired. Request a new password reset link.' }); return; }
+        if (request.method === 'PUT') {
+          if (rejectNextPasswordUpdate) { rejectNextPasswordUpdate = false; reply(500, { code: 'unexpected_failure', msg: 'Could not update your password. Please try again.' }); return; }
+          if (typeof body.password !== 'string' || body.password.length < 8) { reply(422, { code: 'weak_password', msg: 'Use a password with at least eight characters.' }); return; }
+          user.password = body.password;
+          passwordUpdates.push({ userId: user.id });
+        }
+        reply(200, authUser(user)); return;
+      }
       if (url.pathname === '/auth/v1/logout') { reply(204); return; }
       if (url.pathname === '/auth/v1/resend') {
         if (rejectNextResend) { rejectNextResend = false; reply(429, { code: 'over_email_send_rate_limit', msg: 'Please wait before requesting another confirmation email.' }); return; }
         if (body.type !== 'signup' || !String(body.email || '').includes('@')) { reply(422, { msg: 'Enter an account email address.' }); return; }
+        reply(200, {}); return;
+      }
+      if (url.pathname === '/auth/v1/recover') {
+        recoveryRequests.push({ email: String(body.email || ''), redirectTo: url.searchParams.get('redirect_to') });
+        if (rejectNextRecovery) { rejectNextRecovery = false; reply(429, { code: 'over_email_send_rate_limit', msg: 'Please wait before requesting another password reset email.' }); return; }
+        if (!String(body.email || '').includes('@')) { reply(422, { msg: 'Enter an account email address.' }); return; }
+        // Supabase deliberately does not disclose whether an email is registered.
         reply(200, {}); return;
       }
       if (url.pathname.startsWith('/rest/v1/rpc/')) {
@@ -184,9 +204,19 @@ export async function startSupabaseFixture({ port = 4400, appOrigin = 'http://12
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   return {
-    url: `http://127.0.0.1:${port}`, tables, requests,
+    url: `http://127.0.0.1:${port}`, tables, requests, recoveryRequests, passwordUpdates,
     setSignupConfirmationRequired(required) { requireEmailConfirmation = required; },
     rejectNextConfirmationResend() { rejectNextResend = true; },
+    rejectNextRecoveryEmail() { rejectNextRecovery = true; },
+    rejectNextPasswordUpdate() { rejectNextPasswordUpdate = true; },
+    recoveryLink(email) {
+      const user = users.find(value => value.email === email);
+      if (!user) throw new Error('Unknown fixture account');
+      const credentials = session(user);
+      const url = new URL('/?auth=recovery', appOrigin);
+      url.hash = new URLSearchParams({ access_token: credentials.access_token, refresh_token: credentials.refresh_token, expires_in: String(credentials.expires_in), expires_at: String(credentials.expires_at), token_type: 'bearer', type: 'recovery' }).toString();
+      return url.href;
+    },
     confirmAccount(email) { const user = users.find(value => value.email === email); if (!user) throw new Error('Unknown fixture account'); user.confirmed = true; },
     get realtimeRefusals() { return realtimeRefusals; },
     async close() { server.closeAllConnections(); await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); },

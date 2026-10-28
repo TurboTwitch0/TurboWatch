@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpRight, Check, Copy, Film, FolderHeart, ImagePlus, Link, LoaderCircle, Mail, Send, Sparkles, UploadCloud, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, Copy, Eye, EyeOff, Film, FolderHeart, ImagePlus, KeyRound, Link, LoaderCircle, Mail, Send, ShieldCheck, Sparkles, UploadCloud, X, Zap } from 'lucide-react';
 import type { Post } from '@/lib/model';
 import { useSocial } from '@/lib/store';
 import { sitePath } from '@/lib/navigation';
@@ -304,23 +304,43 @@ export function EditProfileDialog({ onClose }: CloseProps) {
   </Dialog>;
 }
 
-export function AuthDialog({ onClose }: CloseProps) {
-  const { mode, backendConfigured, setDemoMode, signIn, signUp, resendConfirmation } = useSocial();
-  const [tab, setTab] = useState<'signin' | 'signup'>('signin');
+function AuthBrand() {
+  return <div className="auth-brand"><span className="auth-brand-icon"><Zap size={18} fill="currentColor" /></span><span>YOUR SPACE TO CONNECT</span></div>;
+}
+
+function PasswordField({ label, value, onChange, busy, autoComplete = 'current-password', minimum, autofocus = false }: {
+  label: string; value: string; onChange: (value: string) => void; busy: boolean;
+  autoComplete?: string; minimum?: number; autofocus?: boolean;
+}) {
+  const id = useId();
+  const [visible, setVisible] = useState(false);
+  return <div className="field"><label htmlFor={id} className="input-label">{label}</label><div className="password-field-control"><input id={id} aria-label={label} data-autofocus={autofocus || undefined} required minLength={minimum} disabled={busy} type={visible ? 'text' : 'password'} autoComplete={autoComplete} placeholder={minimum ? `At least ${minimum} characters` : 'Your password'} value={value} onChange={event => onChange(event.target.value)} /><button type="button" className="password-visibility" aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`} aria-pressed={visible} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></div>;
+}
+
+export function AuthDialog({ onClose, initialTab = 'signin' }: CloseProps & { initialTab?: 'signin' | 'signup' | 'reset' }) {
+  const { mode, backendConfigured, authReady, setDemoMode, signIn, signUp, resendConfirmation, requestPasswordReset } = useSocial();
+  const [tab, setTab] = useState<'signin' | 'signup' | 'reset'>(initialTab);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [resendStatus, setResendStatus] = useState('');
+  const [resetSent, setResetSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const emailInput = useRef<HTMLInputElement>(null);
+  const chooseTab = (next: 'signin' | 'signup' | 'reset') => {
+    setTab(next); setError(''); setSuccess(''); setResendStatus(''); setPassword(''); setResetSent(false);
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setError(''); setSuccess(''); setResendStatus('');
     if (tab === 'signup' && !name.trim()) { setError('Enter your name so people can recognize you.'); return; }
     setBusy(true);
     try {
-      if (tab === 'signup') {
+      if (tab === 'reset') {
+        await requestPasswordReset(email.trim());
+        setResetSent(true);
+      } else if (tab === 'signup') {
         const result = await signUp(email.trim(), password, name.trim());
         if (result.needsEmailConfirmation) {
           setPassword('');
@@ -356,48 +376,61 @@ export function AuthDialog({ onClose }: CloseProps) {
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
-  if (mode === 'demo') return <Dialog title="Sign in with your own account." onClose={onClose}>
-    <div className="auth-demo">
-      <div className="dialog-illustration"><Sparkles size={36} strokeWidth={1.5} /></div>
-      <p>This sample library is a preview. Join the community with your own email and password to publish posts and interact with other people.</p>
-      <button className="primary-button" onClick={leavePreview}>Sign in to real account <ArrowUpRight size={18} /></button>
-    </div>
+  if (mode === 'demo') return <Dialog className="auth-dialog" title="Sign in with your own account." onClose={onClose}>
+    <div className="auth-demo"><AuthBrand /><div className="dialog-illustration"><Sparkles size={36} strokeWidth={1.5} /></div><p>This sample library is a preview. Join the community with your own email and password to publish posts and interact with other people.</p><button className="primary-button" onClick={leavePreview}>Sign in to real account <ArrowUpRight size={18} /></button></div>
   </Dialog>;
 
-  if (!backendConfigured) return <Dialog title="Account setup required" onClose={onClose}>
-    <div className="auth-demo">
-      <div className="dialog-illustration"><Mail size={36} strokeWidth={1.5} /></div>
-      <p>Real sign-in needs this site's Supabase connection. The site owner must finish the database setup and add the project URL and public key in Vercel, then redeploy.</p>
-      <p>Your account will use your own email, password, and profile.</p>
-      <a className="primary-button" href="https://github.com/TurboTwitch0/TurboWatch/blob/main/supabase/SETUP.md" target="_blank" rel="noopener noreferrer">Supabase setup instructions <ArrowUpRight size={18} /></a>
-    </div>
+  if (!backendConfigured) return <Dialog className="auth-dialog" title="Account setup required" onClose={onClose}>
+    <div className="auth-demo"><AuthBrand /><div className="dialog-illustration"><Mail size={36} strokeWidth={1.5} /></div><p>Real sign-in needs this site's Supabase connection. The site owner must finish the database setup and add the project URL and public key in Vercel, then redeploy.</p><p>Your account will use your own email, password, and profile.</p><a className="primary-button" href="https://github.com/TurboTwitch0/TurboWatch/blob/main/supabase/SETUP.md" target="_blank" rel="noopener noreferrer">Supabase setup instructions <ArrowUpRight size={18} /></a></div>
   </Dialog>;
 
-  if (success) return <Dialog title="Check your email." onClose={onClose}>
-    <p className="info-note" role="status"><Mail size={18} />{resendStatus || success}</p>
-    <p className="dialog-intro">If the email hasn't arrived, check your spam folder. You can sign in after confirming your address.</p>
-    {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="form-stack">
-      <button type="button" className="primary-button" disabled={busy} onClick={() => { setTab('signin'); setSuccess(''); setError(''); setResendStatus(''); }}>Back to sign in <ArrowUpRight size={18} /></button>
-      <button type="button" className="secondary-button" disabled={busy} onClick={() => void resend()}>{busy ? <LoaderCircle size={18} className="spin" /> : <Mail size={18} />}{busy ? 'Sending…' : 'Resend confirmation email'}</button>
-    </div>
+  if (!authReady) return <Dialog className="auth-dialog" title="Checking your account…" onClose={onClose}><div className="loading-state" role="status"><LoaderCircle className="spin" size={22} />Restoring your secure session…</div></Dialog>;
+
+  if (success) return <Dialog className="auth-dialog" title="Check your email." onClose={onClose}>
+    <AuthBrand /><p className="info-note" role="status"><Mail size={18} />{resendStatus || success}</p><p className="dialog-intro">If the email hasn't arrived, check your spam folder. You can sign in after confirming your address.</p>{error && <p className="form-error" role="alert">{error}</p>}<div className="form-stack"><button type="button" className="primary-button" disabled={busy} onClick={() => chooseTab('signin')}>Back to sign in <ArrowUpRight size={18} /></button><button type="button" className="secondary-button" disabled={busy} onClick={() => void resend()}>{busy ? <LoaderCircle size={18} className="spin" /> : <Mail size={18} />}{busy ? 'Sending…' : 'Resend confirmation email'}</button></div>
   </Dialog>;
 
-  return <Dialog title={tab === 'signin' ? 'Good to have you back.' : 'Find your people.'} onClose={onClose}>
-    <p className="dialog-intro">{tab === 'signin' ? 'Sign in to your account to publish posts and connect with the community.' : 'Create your own account. Your posts and profile will be visible to the community.'}</p>
-    <div className="tabs auth-tabs" aria-label="Account access">
-      <button type="button" disabled={busy} className={tab === 'signin' ? 'active' : ''} onClick={() => { setTab('signin'); setError(''); setSuccess(''); setResendStatus(''); setPassword(''); }}>Sign in</button>
-      <button type="button" disabled={busy} className={tab === 'signup' ? 'active' : ''} onClick={() => { setTab('signup'); setError(''); setSuccess(''); setResendStatus(''); setPassword(''); }}>Create account</button>
-    </div>
+  if (tab === 'reset') return <Dialog className="auth-dialog" title="Reset your password." onClose={onClose}>
+    <AuthBrand /><div className="auth-security-note"><KeyRound size={21} /><span>A fresh start for your account.</span></div><p className="dialog-intro">Enter your account email. We’ll send a secure link so you can choose a new password.</p>
+    {resetSent && <p className="info-note" role="status"><Mail size={18} />If an account exists for {email.trim()}, a password reset link will arrive shortly. Check your inbox and spam folder.</p>}
+    <form className="form-stack" onSubmit={submit}><label className="field"><span className="input-label">Email address</span><input ref={emailInput} data-autofocus required type="email" disabled={busy} autoComplete="email" placeholder="you@example.com" value={email} onChange={event => { setEmail(event.target.value); setResetSent(false); }} /></label>{error && <p className="form-error" role="alert">{error}</p>}<button type="submit" className="primary-button" disabled={busy}>{busy ? <LoaderCircle size={18} className="spin" /> : <Mail size={18} />}{busy ? 'Sending…' : 'Send reset link'}</button><button type="button" className="text-button" disabled={busy} onClick={() => chooseTab('signin')}><ArrowLeft size={16} />Back to sign in</button></form>
+  </Dialog>;
+
+  return <Dialog className="auth-dialog" title={tab === 'signin' ? 'Good to have you back.' : 'Find your people.'} onClose={onClose}>
+    <AuthBrand /><p className="dialog-intro">{tab === 'signin' ? 'Sign in to your account to publish posts and connect with the community.' : 'Create your own account. Your posts and profile will be visible to the community.'}</p>
+    <div className="tabs auth-tabs" aria-label="Account access"><button type="button" disabled={busy} className={tab === 'signin' ? 'active' : ''} onClick={() => chooseTab('signin')}>Sign in</button><button type="button" disabled={busy} className={tab === 'signup' ? 'active' : ''} onClick={() => chooseTab('signup')}>Create account</button></div>
     <form className="form-stack" onSubmit={submit}>
       {tab === 'signup' && <label className="field"><span className="input-label">Your name</span><input required maxLength={60} disabled={busy} autoComplete="name" value={name} onChange={event => setName(event.target.value)} /></label>}
       <label className="field"><span className="input-label">Email address</span><input ref={emailInput} data-autofocus required type="email" disabled={busy} autoComplete="email" placeholder="you@example.com" value={email} onChange={event => setEmail(event.target.value)} /></label>
-      <label className="field"><span className="input-label">Password</span><input required minLength={tab === 'signup' ? 8 : undefined} disabled={busy} type="password" autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} placeholder={tab === 'signup' ? 'At least 8 characters' : 'Your password'} value={password} onChange={event => setPassword(event.target.value)} /></label>
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {resendStatus && <p className="info-note" role="status"><Mail size={18} />{resendStatus}</p>}
+      <PasswordField label="Password" value={password} onChange={setPassword} busy={busy} minimum={tab === 'signup' ? 8 : undefined} autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} />
+      {tab === 'signin' && <button type="button" className="text-button auth-forgot" disabled={busy} onClick={() => chooseTab('reset')}>Forgot password?</button>}
+      {error && <p className="form-error" role="alert">{error}</p>}{resendStatus && <p className="info-note" role="status"><Mail size={18} />{resendStatus}</p>}
       <button type="submit" className="primary-button" disabled={busy}>{busy ? <LoaderCircle size={18} className="spin" /> : <ArrowUpRight size={18} />}{busy ? 'One moment…' : tab === 'signin' ? 'Sign in' : 'Create account'}</button>
       {tab === 'signin' && <button type="button" className="text-button" disabled={busy} onClick={() => void resend()}>Resend confirmation email</button>}
-    </form>
+    </form><p className="auth-security-note"><ShieldCheck size={15} />Your profile is public. Your password and messages stay private.</p>
+  </Dialog>;
+}
+
+export function PasswordRecoveryDialog({ onClose, onRequestReset }: CloseProps & { onRequestReset: () => void }) {
+  const { authReady, hasSession, recoveryAuthorized, recoveryError, backendConfigured, updatePassword } = useSocial();
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setError('');
+    if (password !== confirmation) { setError('Your passwords do not match. Enter the same new password twice.'); return; }
+    if (password.length < 8) { setError('Use a password with at least 8 characters.'); return; }
+    setBusy(true);
+    try { await updatePassword(password); setPassword(''); setConfirmation(''); }
+    catch (caught) { setError(errorMessage(caught)); }
+    finally { setBusy(false); }
+  };
+  return <Dialog className="auth-dialog" title="Choose a new password." onClose={() => { if (!busy) onClose(); }}>
+    <AuthBrand />{!authReady ? <div className="loading-state" role="status"><LoaderCircle className="spin" size={22} />Checking your reset link…</div> : !backendConfigured || !hasSession || !recoveryAuthorized || recoveryError ? <div className="form-stack"><p className="form-error" role="alert">{recoveryError || 'This reset link is invalid or has expired. Request a new link to continue.'}</p><p className="dialog-intro">Open the newest password reset email for your account. A normal sign-in session cannot replace that reset link.</p><button type="button" className="primary-button" onClick={onRequestReset}><Mail size={18} />Request a new reset link</button></div> : <>
+      <div className="auth-security-note"><ShieldCheck size={21} /><span>Your reset link has been verified.</span></div><p className="dialog-intro">Choose a password you haven’t used before. You’ll stay signed in with your own account.</p>
+      <form className="form-stack" onSubmit={submit}><PasswordField label="New password" value={password} onChange={setPassword} busy={busy} minimum={8} autoComplete="new-password" autofocus /><PasswordField label="Confirm new password" value={confirmation} onChange={setConfirmation} busy={busy} minimum={8} autoComplete="new-password" />{error && <p className="form-error" role="alert">{error}</p>}<button type="submit" className="primary-button" disabled={busy}>{busy ? <LoaderCircle size={18} className="spin" /> : <Check size={18} />}{busy ? 'Updating…' : 'Update password'}</button></form>
+    </>}
   </Dialog>;
 }
 

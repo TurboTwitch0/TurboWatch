@@ -24,11 +24,12 @@ import type {
   SocialState,
 } from './model';
 import { demoUser, seedBoards, seedComments, seedCreators, seedMessages, seedPosts } from './seed';
-import { getSupabase, liveBackendConfigured } from './supabase';
+import { getSupabase, liveBackendConfigured, updateRecoveryPassword } from './supabase';
 import { createDemoState, restoreDemo } from './demo-state';
 import { createRefreshQueue, reconcileRows, sameStrings, type RefreshQueue } from './live-sync';
 
 const STORAGE_KEY = 'turbowatch:demo:v1';
+const RECOVERY_KEY = 'turbowatch:password-recovery:v1';
 const EPOCH = '1970-01-01T00:00:00.000Z';
 const BACKEND_SETUP_MESSAGE = 'Real accounts are not configured yet. The site owner must set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel, then redeploy. No demo account is signed in.';
 
@@ -142,6 +143,11 @@ export interface SocialContextValue extends SocialState {
   currentUser: Creator | null;
   mode: 'demo' | 'live';
   backendConfigured: boolean;
+  authReady: boolean;
+  hasSession: boolean;
+  recoveryRequested: boolean;
+  recoveryAuthorized: boolean;
+  recoveryError: string | null;
   loading: boolean;
   error: string | null;
   notice: string | null;
@@ -169,6 +175,9 @@ export interface SocialContextValue extends SocialState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<{ needsEmailConfirmation: boolean }>;
   resendConfirmation: (email: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
+  cancelRecovery: () => void;
   signOut: () => Promise<void>;
 }
 
@@ -183,6 +192,14 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  const [recoveryRequested, setRecoveryRequested] = useState(false);
+  const [recoveryAuthorized, setRecoveryAuthorized] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const recoveryUserId = useRef<string | null>(null);
+  const recoveryExpiresAt = useRef(0);
+  const recoveryInvalid = useRef(false);
   const [publicActivity, setPublicActivity] = useState<PublicActivity>(EMPTY_ACTIVITY);
   const [syncStatus, setSyncStatus] = useState<'connecting' | 'live' | 'polling' | 'offline'>('connecting');
   const [demoRequested, setDemoRequested] = useState<boolean | null>(null);
@@ -216,6 +233,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   const setLiveIdentity = useCallback((userId: string | null) => {
     if (modeRef.current !== 'live') return;
+    setHasSession(Boolean(userId));
     if (liveUserId.current !== userId || (stateRef.current.user && stateRef.current.user.id !== userId)) {
       // Never keep the previous account's private data on screen while a new
       // session loads, even if that refresh fails or the machine goes offline.
@@ -229,6 +247,29 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     }
     liveUserId.current = userId;
   }, [replaceState]);
+
+  const clearRecoveryProof = useCallback(() => {
+    recoveryUserId.current = null;
+    recoveryExpiresAt.current = 0;
+    setRecoveryAuthorized(false);
+    try { window.sessionStorage.removeItem(RECOVERY_KEY); } catch { /* The in-memory proof is still cleared. */ }
+  }, []);
+
+  const cancelRecovery = useCallback(() => {
+    clearRecoveryProof();
+    recoveryInvalid.current = false;
+    setRecoveryRequested(false);
+    setRecoveryError(null);
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('auth') === 'recovery') url.searchParams.delete('auth');
+    const hash = new URLSearchParams(url.hash.slice(1));
+    for (const key of ['error', 'error_code', 'error_description']) {
+      url.searchParams.delete(key);
+      hash.delete(key);
+    }
+    url.hash = hash.size ? hash.toString() : '';
+    window.history.replaceState({}, '', url);
+  }, [clearRecoveryProof]);
 
   const setDemoMode = useCallback((enabled: boolean) => {
     if (demoRequestedRef.current === enabled) return;
@@ -244,20 +285,42 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     refreshQueueRef.current?.dispose();
     refreshQueueRef.current = null;
     liveUserId.current = null;
+    setHasSession(false);
+    setAuthReady(false);
+    if (enabled) {
+      clearRecoveryProof();
+      setRecoveryRequested(false);
+      setRecoveryError(null);
+    }
     setError(null);
     setNotice(null);
     syncErrorRef.current = false;
     setPublicActivity(EMPTY_ACTIVITY);
     setLoading(true);
     replaceState(nextMode === 'demo' ? initialDemoState() : emptyLiveState());
-  }, [replaceState]);
+  }, [replaceState, clearRecoveryProof]);
 
   useEffect(() => {
-    const readMode = () => setDemoMode(new URLSearchParams(window.location.search).get('demo') === '1');
+    const readMode = () => {
+      const params = new URLSearchParams(window.location.search);
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      const requested = params.get('auth') === 'recovery' || hash.get('type') === 'recovery';
+      // Recovery callbacks always belong to real account access, even when a
+      // visitor previously viewed the explicitly selected sample library.
+      setDemoMode(!requested && params.get('demo') === '1');
+      if (requested) {
+        setRecoveryRequested(true);
+        if (['error', 'error_code', 'error_description'].some(key => params.has(key) || hash.has(key))) {
+          recoveryInvalid.current = true;
+          clearRecoveryProof();
+          setRecoveryError('This reset link is invalid or has expired. Request a new link to continue.');
+        }
+      }
+    };
     readMode();
     window.addEventListener('popstate', readMode);
     return () => window.removeEventListener('popstate', readMode);
-  }, [setDemoMode]);
+  }, [setDemoMode, clearRecoveryProof]);
 
   const commitDemo = useCallback((update: (previous: SocialState) => SocialState) => {
     if (modeRef.current !== 'demo') throw new DOMException('This demo session is no longer active.', 'AbortError');
@@ -332,6 +395,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     if (demoRequested === null) return;
     setError(null);
     if (mode === 'demo') {
+      setHasSession(false);
+      setAuthReady(true);
       try {
         const restored = restoreDemo(window.localStorage.getItem(STORAGE_KEY), initialDemoState());
         replaceState(restored);
@@ -356,6 +421,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Community connection settings are invalid.');
       setLoading(false);
+      setAuthReady(true);
       return;
     }
     if (!db) {
@@ -363,6 +429,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       setError(BACKEND_SETUP_MESSAGE);
       setSyncStatus('offline');
       setLoading(false);
+      setAuthReady(true);
       return;
     }
     const client = db;
@@ -437,15 +504,42 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       }
       if (active && version === authVersion) request(true);
     };
-    const receiveSession = (session: Session | null) => {
+    const receiveSession = (session: Session | null, event?: string) => {
       if (!active || modeRef.current !== 'live') return;
       const version = ++authVersion;
       setLiveIdentity(session?.user.id ?? null);
+      setAuthReady(true);
+      if (event === 'PASSWORD_RECOVERY' && session && !recoveryInvalid.current) {
+        recoveryUserId.current = session.user.id;
+        setRecoveryAuthorized(true);
+        setRecoveryRequested(true);
+        setRecoveryError(null);
+        // A per-tab, account-scoped marker lets a refresh resume a verified
+        // recovery session. It contains no access token or password.
+        const expiresAt = Math.min(Date.now() + 30 * 60_000, (session.expires_at ?? Infinity) * 1000);
+        recoveryExpiresAt.current = expiresAt;
+        try { window.sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({ userId: session.user.id, expiresAt })); } catch { /* Current recovery remains usable without persistent storage. */ }
+        const url = new URL(window.location.href);
+        url.searchParams.delete('demo');
+        url.searchParams.set('auth', 'recovery');
+        window.history.replaceState({}, '', url);
+      } else if (event === 'SIGNED_OUT') {
+        cancelRecovery();
+      } else if (session && !recoveryInvalid.current) {
+        let proof: { userId?: string; expiresAt?: number } | null = null;
+        try { proof = JSON.parse(window.sessionStorage.getItem(RECOVERY_KEY) || 'null'); } catch { /* Missing storage must not authorize recovery. */ }
+        if (proof?.userId === session.user.id && typeof proof.expiresAt === 'number' && proof.expiresAt > Date.now()) {
+          recoveryUserId.current = session.user.id;
+          recoveryExpiresAt.current = proof.expiresAt;
+          setRecoveryAuthorized(true);
+          setRecoveryRequested(true);
+        } else if (recoveryUserId.current !== session.user.id || recoveryExpiresAt.current <= Date.now()) clearRecoveryProof();
+      } else clearRecoveryProof();
       // Leave the auth callback before SDK/database work to avoid auth-lock
       // deadlocks. Version checks discard stale bootstrap/token callbacks.
       window.setTimeout(() => { void applySession(session, version); }, 0);
     };
-    const { data: listener } = client.auth.onAuthStateChange((_event, session) => receiveSession(session));
+    const { data: listener } = client.auth.onAuthStateChange((event, session) => receiveSession(session, event));
     void client.auth.getSession().then(({ data, error: sessionError }) => {
       if (!active || authVersion !== 0) return;
       if (sessionError) reportFailure(sessionError);
@@ -484,7 +578,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       listener.subscription.unsubscribe();
       if (channel) void client.removeChannel(channel).catch(() => {});
     };
-  }, [demoRequested, mode, refreshLive, replaceState, setLiveIdentity]);
+  }, [demoRequested, mode, refreshLive, replaceState, setLiveIdentity, cancelRecovery, clearRecoveryProof]);
 
   const refreshAfterMutation = async (userId: string | null) => {
     if (modeRef.current !== 'live' || userId !== liveUserId.current) return;
@@ -814,6 +908,42 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     if (failure) throw new Error(failure.message);
   });
 
+  const requestPasswordReset = (email: string) => run(async () => {
+    const db = requireAuthBackend();
+    const generation = modeGeneration.current;
+    const cleanEmail = textValue(email, 'Email address', 320);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new Error('Enter a valid account email address.');
+    const { error: failure } = await db.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: new URL('/?auth=recovery', window.location.origin).href,
+    });
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) throw new DOMException('This request belongs to a previous session.', 'AbortError');
+    if (failure) throw new Error(failure.message);
+  }, true);
+
+  const updatePassword = (password: string) => run(async () => {
+    const db = requireAuthBackend();
+    const generation = modeGeneration.current;
+    const recoveryId = recoveryUserId.current;
+    if (recoveryInvalid.current || !recoveryId || recoveryExpiresAt.current <= Date.now()) {
+      clearRecoveryProof();
+      throw new Error('This reset link is invalid or has expired. Request a new link to continue.');
+    }
+    if (password.length < 8) throw new Error('Use a password with at least 8 characters.');
+    const { data: sessionData, error: sessionError } = await db.auth.getSession();
+    if (modeRef.current !== 'live' || generation !== modeGeneration.current) throw new DOMException('This recovery belongs to a previous session.', 'AbortError');
+    if (sessionError || !sessionData.session || sessionData.session.user.id !== recoveryId || liveUserId.current !== recoveryId) {
+      clearRecoveryProof();
+      throw new Error('Your recovery session has ended. Request a new reset link.');
+    }
+    // An isolated in-memory SDK client is seeded with this verified account.
+    // A concurrent tab changing the main session cannot substitute its JWT.
+    await updateRecoveryPassword(sessionData.session, password, () => {
+      if (modeRef.current !== 'live' || generation !== modeGeneration.current || liveUserId.current !== recoveryId || recoveryUserId.current !== recoveryId) throw new DOMException('This recovery belongs to a previous session.', 'AbortError');
+    });
+    cancelRecovery();
+    setNotice('Your password is updated. You’re signed in with your account.');
+  }, true);
+
   const signOut = () => run(async () => {
     if (mode === 'demo') {
       setNotice('You are exploring a local demo profile. Real accounts are available when a Supabase project is connected.');
@@ -824,7 +954,10 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     if (modeRef.current !== 'live' || generation !== modeGeneration.current) return;
     if (failure) throw new Error(failure.message);
     setLiveIdentity(null);
-    await refreshAfterMutation(null);
+    cancelRecovery();
+    // Signing out succeeds independently of a missing or unavailable community
+    // schema. Private state is cleared immediately by setLiveIdentity.
+    try { await refreshAfterMutation(null); } catch { /* Background synchronization reports community errors separately. */ }
   }, true);
 
   const conversations = useMemo(() => {
@@ -873,12 +1006,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   }, [mode, state.user, state.repostedIds, publicActivity.reposts]);
 
   return <SocialContext.Provider value={{
-    ...state, currentUser: state.user, mode, backendConfigured: liveBackendConfigured, loading, error, notice, conversations, notifications,
+    ...state, currentUser: state.user, mode, backendConfigured: liveBackendConfigured, authReady, hasSession, recoveryRequested, recoveryAuthorized, recoveryError, loading, error, notice, conversations, notifications,
     publicReposts, syncStatus, refreshCommunity, setDemoMode,
     clearError: () => setError(null), clearNotice: () => setNotice(null),
     toggleLike, toggleSave, toggleRepost, toggleFollow, addComment, createPost, updateProfile,
     sendMessage, createBoard, saveToBoard, markConversationRead, markNotificationsRead,
-    uploadMedia, signIn, signUp, resendConfirmation, signOut,
+    uploadMedia, signIn, signUp, resendConfirmation, requestPasswordReset, updatePassword, cancelRecovery, signOut,
   }}>{children}</SocialContext.Provider>;
 }
 
