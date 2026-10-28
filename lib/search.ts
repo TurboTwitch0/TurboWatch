@@ -5,7 +5,7 @@ function normalize(value: string): string {
 }
 
 function terms(query: string): string[] {
-  return normalize(query).trim().split(/\s+/).map(term => term.replace(/^[@#]+/, '')).filter(Boolean);
+  return normalize(query).trim().split(/[\s,]+/).map(term => term.replace(/^[@#]+/, '')).filter(Boolean);
 }
 
 export function matchesCreator(creator: Creator, query: string): boolean {
