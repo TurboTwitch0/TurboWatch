@@ -78,6 +78,16 @@ This error means the Supabase Data API cannot resolve the table in its schema ca
 
 Applying the database schema or refreshing its API cache takes effect without a Vercel redeployment. Changing a `NEXT_PUBLIC_` URL or key requires a new app build because Next.js embeds those values at build time. Never paste database passwords or service-role keys into the app or a support message.
 
+## In-focus discovery showcase
+
+The guest product preview and default discovery feed now use a manually controlled content stage. Native CSS gives the original covers depth, layered light, and a curved composition while the everyday feed and tools stay readable. The focused item opens the existing photo/video detail view; sample preview actions explicitly enter the sample library and open the matching story.
+
+Use Previous/Next, scoped Left/Right/Home/End keys, or a horizontal swipe. Visible controls are available without hovering, nothing advances automatically, and reduced motion removes transitions and flattens the spatial treatment. Selection stays tied to a post ID when other posts arrive; browsing the stage never mounts a video player or replaces an already-open player.
+
+Current desktop/mobile showcase screenshots are in [the export kit](outputs/turbowatch-launch/README.md). Logo variants, the brand sheet, and launch copy from the original identity pass are preserved. Reproducible source helpers now live under [scripts/brand](scripts/brand/README.md), outside the downloadable assets.
+
+The showcase delta passed the production build and ten focused browser scenarios, including real open/watch actions, scoped keyboard/touch controls, stable selection during incoming posts, preserved player/share state, responsive layouts, and reduced-motion behavior. Current asset changes and removals are listed in [asset-delta.json](outputs/turbowatch-launch/asset-delta.json). Backend and account behavior remain unchanged.
+
 ## Account recovery
 
 Use **Forgot password?** on sign-in to request a real Supabase reset email. The reset screen supports password confirmation, show/hide controls, recoverable errors, and refresh in the same tab. A valid recovery session is required before changing a password; an expired link or an unrelated existing account cannot authorize a reset. Set the deployed `/?auth=recovery` URL in Supabase’s allowed redirects as described in [the setup guide](supabase/SETUP.md). The account menu exposes sign-out from every view, including when the account is authenticated but its profile cannot be loaded.

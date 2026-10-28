@@ -10,16 +10,18 @@ Original reusable identity and launch artwork for the existing TurboWatch app. T
 | `social-preview.svg`, `social-preview.png` | 1200 × 630 | Landscape social / link preview |
 | `portrait-promo.svg`, `portrait-promo.png` | 1080 × 1350 | Portrait promotion |
 | `product-desktop.png` | 1440 × 1050 | Actual redesigned local product screen |
-| `product-mobile.png` | 390 × 844 | Actual redesigned local guest preview used in portrait art |
+| `product-mobile.png` | 390 × 844 | Actual introductory local guest preview |
+| `showcase-desktop.png`, `showcase-mobile.png` | PNG | Current cinematic discovery stage, captured from the real local app |
 | `product-feed-mobile.png` | 390 × 844 | Additional actual sample-feed screen; not used in promotional compositions |
 | `logo-primary.svg`, `logo-inverse.svg`, `icon.svg` | SVG | Reusable logo variants copied from the app brand assets |
 | `launch-copy.md` | Markdown | Concise prepared copy with a fact-check note |
 | `manrope.ttf`, `MANROPE-OFL.txt` | TTF / text | Bundled open-source typography and its license |
 | `MEDIA-CREDITS.md`, `licenses/` | Markdown / text | Product sample-media attribution and retained source licenses |
-| `generate-kit.py`, `export-png.py` | Python | Rebuild the SVG compositions and local PNG exports |
-| `turbowatch-launch-kit.zip` | ZIP | Complete portable collection of the kit files, excluding the ZIP itself |
+| `turbowatch-launch-kit.zip` | ZIP | Portable exported assets, copy, screenshots, fonts, and credits; source generators and manifests are excluded |
 
 The SVG compositions embed their screenshot and Manrope font data so they travel as standalone files. The PNG files are exact-size raster exports. The screenshots show the actual local application; **sample content is labeled and is not evidence of published community posts**.
+
+The current product presentation adds a cinematic content stage: a focused story, dimensional neighboring covers, and explicit browsing controls. Its watch/open action leads into the existing product. The stage does not autoplay or replace the everyday feed, search, sharing, or account tools. Keyboard, touch, narrow-screen, and reduced-motion paths remain part of the interface. The portrait composition uses the current guest showcase capture rather than a sample feed with fictional view/like totals.
 
 ## Identity
 
@@ -42,4 +44,4 @@ The horizontal logo wordmarks use outlined Manrope glyphs and remain portable wi
 
 ## Export
 
-Run `python3 outputs/turbowatch-launch/generate-kit.py` from the repository root after the product screenshots exist. Export the resulting standalone SVGs to PNG at their declared dimensions using a browser. Run `python3 outputs/turbowatch-launch/export-png.py` to rasterize with the existing local Inkscape tool and bundled Manrope font. No paid API or external generation service is required.
+Source helpers live outside this exported kit in `scripts/brand/`. After the actual product screenshots exist, run `python3 scripts/brand/generate-kit.py --promos-only` and `python3 scripts/brand/export-png.py --promos-only` from the repository root to refresh the screenshot-based compositions while preserving the reusable brand sheet. The existing local Inkscape tool rasterizes the standalone SVGs at their declared dimensions with the bundled Manrope font. No paid API or external generation service is required. Downloadable exports contain no generator source files.

@@ -5,13 +5,16 @@ from tempfile import TemporaryDirectory
 from html import escape
 import os
 import subprocess
+import sys
 
-folder = Path(__file__).resolve().parent
+folder = Path(__file__).resolve().parents[2] / 'outputs' / 'turbowatch-launch'
 with TemporaryDirectory(prefix='turbowatch-brand-fonts-') as temporary:
     config = Path(temporary)/'fonts.conf'
     config.write_text(f'''<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><include>/etc/fonts/fonts.conf</include><dir>{escape(str(folder))}</dir><cachedir>{escape(temporary)}/cache</cachedir></fontconfig>''')
     env = dict(os.environ, FONTCONFIG_FILE=str(config))
     for name,width,height in [('brand-sheet',1600,1200),('social-preview',1200,630),('portrait-promo',1080,1350)]:
+        if name == 'brand-sheet' and '--promos-only' in sys.argv:
+            continue
         source=folder/f'{name}.svg'
         if not source.exists():
             continue

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { SocialProvider } from '@/lib/store';
 import './globals.css';
+import './showcase.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://turbo-watch-turbo-twitch.vercel.app'),

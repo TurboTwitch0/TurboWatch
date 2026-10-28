@@ -1,0 +1,116 @@
+{
+  "project": "TurboWatch",
+  "base_commit": "bc67b482422baa383b4873739c169e9f45086747",
+  "added": [
+    {
+      "path": "outputs/turbowatch-launch/showcase-desktop.png",
+      "bytes": 369708,
+      "sha256": "efa3736a29fd25005cf7b2615b86dfb2cdff41f4fa7303e01d2e3c0eb063ea5b",
+      "git_blob": "dfa4960854e8fb617c818c11d2cbedc53729ebb6"
+    },
+    {
+      "path": "outputs/turbowatch-launch/showcase-mobile.png",
+      "bytes": 312834,
+      "sha256": "ef9055d08719309f4fe03a8ab4958589162beb3361be99b63054245fdb1a3dfd",
+      "git_blob": "bf677489e585f8dd1ab73e142d9464aa80239efe"
+    }
+  ],
+  "changed": [
+    {
+      "path": "outputs/turbowatch-launch/README.md",
+      "bytes": 5197,
+      "sha256": "cb4d8a2e0a1a5a4651c913ca031a57b8e92023c2c422aa4c05e6c19993e7f299",
+      "git_blob": "8991374937229eaa0b2bc864f678f5e2e2a062f7",
+      "previous_git_blob": "9ca6374a69ff337e33a677f907e30d419053782d"
+    },
+    {
+      "path": "outputs/turbowatch-launch/portrait-promo.png",
+      "bytes": 528930,
+      "sha256": "dd50ba0f93a88585c7cc93f7ab2307ac5bd72607602d988c08479794577cc403",
+      "git_blob": "87388b86343671cbb1c556ee10bdb83955bcf59f",
+      "previous_git_blob": "33a002bdcbbc4db7d90d02fd964983098bbd0484"
+    },
+    {
+      "path": "outputs/turbowatch-launch/portrait-promo.svg",
+      "bytes": 655815,
+      "sha256": "3dd840d9a97423b0ad5f08c4770ababbc8ae67b3c0d32756e60d045e223257f6",
+      "git_blob": "652ecc7d01c7fad7a0a58789775ef5ebe824a065",
+      "previous_git_blob": "df36df6c506dbf1926b77963e5a1c275ba3bb40d"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-desktop.png",
+      "bytes": 770456,
+      "sha256": "ddbb85d5b75bdc6760eb980662d4c11cf5d1055fb115f4334a07b3ea89cf3f45",
+      "git_blob": "6c6cfe7b7870010287f21e9990f3f3b8924686e1",
+      "previous_git_blob": "575bd06e2118146c9b6dfd0254c8e52cb043a838"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-feed-mobile.png",
+      "bytes": 240888,
+      "sha256": "8fbbad2d639ad6f9c4179f6b27380813e18e02692c4ce329a2b6e5f838bdb039",
+      "git_blob": "3df287c3c227a1dccf06581abc7450c613a2e553",
+      "previous_git_blob": "e984d6d6c8549501aafbc4a8438090f6b7e7fe77"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-feed.png",
+      "bytes": 788113,
+      "sha256": "97ec56bf1ac7f1cf4376b8a55c124eb7c491143e7b8a8c1e763175ef1ebbf600",
+      "git_blob": "dd9751955a49921055deb446c4fe9e22c8070738",
+      "previous_git_blob": "6854b5bcca830657aa5722ef6cdd99a398525ff2"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-mobile.png",
+      "bytes": 241325,
+      "sha256": "aa81d061014f4caa1be28f4f748fb031c3eabd612cdc0bf399634868701f16fa",
+      "git_blob": "39901e4bdd617c35be9ee13de424cd6f635241ab",
+      "previous_git_blob": "41a8695e48f6c6e45402a7ac943d97de390670ce"
+    },
+    {
+      "path": "outputs/turbowatch-launch/social-preview.png",
+      "bytes": 266831,
+      "sha256": "bd8553e6e1659ba31842feefd8210b2281f28b78e4f89e43eb743828761fa73f",
+      "git_blob": "a0523f11d9665266b5f63350528403806d11353e",
+      "previous_git_blob": "1d815634129ef4da2973bc1dacae337a6b8c34ba"
+    },
+    {
+      "path": "outputs/turbowatch-launch/social-preview.svg",
+      "bytes": 1265497,
+      "sha256": "be3791e8509f60897543fa2440994f4021c2acf160c21d8c55fcc39f23c3d0da",
+      "git_blob": "92125e862f83c888dc9ccfe59ec204f248d65809",
+      "previous_git_blob": "370da47e6702cc65b77f3637b3e20dba714d281e"
+    },
+    {
+      "path": "outputs/turbowatch-launch/turbowatch-launch-kit.zip",
+      "bytes": 5202647,
+      "sha256": "6f18e76c5b5f095af1fc6d7eff0c0f5f211a911dfe9a339493f8e9f3a5c6ebc4",
+      "git_blob": "1c2f66166d9bfb5cbd9feab5ac97554a384c3538",
+      "previous_git_blob": "62eca7d65fe8755560547754d4c10413fe535e4a"
+    }
+  ],
+  "removed": [
+    {
+      "path": "outputs/turbowatch-launch/export-png.py",
+      "previous_git_blob": "fc0934bea1f558be47aa25bc4ddc1cd64c231bae",
+      "reason": "Source generator moved to scripts/brand and excluded from exports"
+    },
+    {
+      "path": "outputs/turbowatch-launch/generate-kit.py",
+      "previous_git_blob": "ca39ff5396fb871bac9c93411591a3328571c393",
+      "reason": "Source generator moved to scripts/brand and excluded from exports"
+    }
+  ],
+  "unchanged": [
+    "outputs/turbowatch-launch/MANROPE-OFL.txt",
+    "outputs/turbowatch-launch/MEDIA-CREDITS.md",
+    "outputs/turbowatch-launch/brand-sheet.png",
+    "outputs/turbowatch-launch/brand-sheet.svg",
+    "outputs/turbowatch-launch/icon.svg",
+    "outputs/turbowatch-launch/launch-copy.md",
+    "outputs/turbowatch-launch/licenses/GLIGHTBOX-LICENSE.md",
+    "outputs/turbowatch-launch/licenses/STARTBOOTSTRAP-LICENSE.txt",
+    "outputs/turbowatch-launch/logo-inverse.svg",
+    "outputs/turbowatch-launch/logo-primary.svg",
+    "outputs/turbowatch-launch/manrope.ttf"
+  ],
+  "export_notes": "Only deliverable assets, copy, credits, fonts and archive. No source generators, traces, credentials, caches or JSON metadata inside ZIP."
+}

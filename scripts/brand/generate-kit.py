@@ -4,8 +4,9 @@ from pathlib import Path
 from base64 import b64encode
 from html import escape
 import json
+import sys
 
-OUT = Path(__file__).resolve().parent
+OUT = Path(__file__).resolve().parents[2] / 'outputs' / 'turbowatch-launch'
 PINE, PAPER, CORAL, SAGE, BUTTER = '#24382b', '#f7f5ef', '#e64c36', '#edf1e6', '#e4b96e'
 MUTED, LINE = '#64725e', '#dce2d3'
 FONT = b64encode((OUT/'manrope.ttf').read_bytes()).decode()
@@ -126,7 +127,7 @@ def landscape():
 
 
 def portrait():
-    shot=OUT/'product-mobile.png'
+    shot=OUT/'showcase-mobile.png'
     if not shot.exists(): raise FileNotFoundError(f'Capture the actual mobile product preview first: {shot}')
     defs='<clipPath id="phone"><rect x="563" y="332" width="414" height="896" rx="28"/></clipPath>'
     b=rect(0,0,1080,1350,PAPER,0)+orbit(872,846,420,353,LINE,-22)
@@ -153,7 +154,8 @@ def portrait():
 
 
 if __name__=='__main__':
-    (OUT/'brand-sheet.svg').write_text(brand_sheet())
+    if '--promos-only' not in sys.argv:
+        (OUT/'brand-sheet.svg').write_text(brand_sheet())
     for name,maker in [('social-preview',landscape),('portrait-promo',portrait)]:
         try:
             (OUT/f'{name}.svg').write_text(maker())
