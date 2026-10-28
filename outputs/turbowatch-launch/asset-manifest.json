@@ -1,0 +1,144 @@
+{
+  "project": "TurboWatch",
+  "delivery": "Committed GitHub assets; no external posts or Vercel deployment",
+  "files": [
+    {
+      "path": "outputs/turbowatch-launch/MANROPE-OFL.txt",
+      "bytes": 4387,
+      "sha256": "58172e0c0fac2cda8a37b348164bb55e44b0e69051e557e92b1d3f6910141f7b",
+      "git_blob": "e271172a9ed0cddc895aabb6509f1c7d880b492d"
+    },
+    {
+      "path": "outputs/turbowatch-launch/MEDIA-CREDITS.md",
+      "bytes": 8645,
+      "sha256": "bf0508b4019e658d2e9d8b5ab662e2b964848ea3ede9d7ac67920a0979525bfc",
+      "git_blob": "9680489018009e77ef9dd4964bf0ed302e8283a6"
+    },
+    {
+      "path": "outputs/turbowatch-launch/README.md",
+      "bytes": 4468,
+      "sha256": "92664308d4b8a8010a779db930ee61baa2d85be25ffb4f59822916c5d38a0df2",
+      "git_blob": "9ca6374a69ff337e33a677f907e30d419053782d"
+    },
+    {
+      "path": "outputs/turbowatch-launch/brand-sheet.png",
+      "bytes": 233110,
+      "sha256": "6a432aac299fb9b6bb4e7a5015414484512e2f49f6a284ab41ef14598f83d656",
+      "git_blob": "9838c590b67e9bae473395443c613df71db7a8a8"
+    },
+    {
+      "path": "outputs/turbowatch-launch/brand-sheet.svg",
+      "bytes": 256411,
+      "sha256": "f20074326dc627df877daf68d7a9d899969040e4abff34e82d5de76e708d8e7f",
+      "git_blob": "99ddc77c2425796f76b988de04ee9bca44a5b923"
+    },
+    {
+      "path": "outputs/turbowatch-launch/export-png.py",
+      "bytes": 1161,
+      "sha256": "046512b877eef8ff4918497564bbc5aae90d4da8b32e11d900bd36d2d4e0e105",
+      "git_blob": "fc0934bea1f558be47aa25bc4ddc1cd64c231bae"
+    },
+    {
+      "path": "outputs/turbowatch-launch/generate-kit.py",
+      "bytes": 10283,
+      "sha256": "6a5d41cb7cd3e0d9fef10e1afadd65628977928d6dc1296c93639b445679fd45",
+      "git_blob": "ca39ff5396fb871bac9c93411591a3328571c393"
+    },
+    {
+      "path": "outputs/turbowatch-launch/icon.svg",
+      "bytes": 257,
+      "sha256": "350dc317dbd92b974bdaeafc9fd72cb96fa954c04fcdfdd5eb2be05dbfbf99d8",
+      "git_blob": "26c0331f3854912015075b45a3e112a972ddaecd"
+    },
+    {
+      "path": "outputs/turbowatch-launch/launch-copy.md",
+      "bytes": 1759,
+      "sha256": "20e778b789d9274c3c32a788be7731532501013e662dfa8620416f8736a81ba4",
+      "git_blob": "f78dcdca1726a99e217557e0ee5b8aedf6e4c924"
+    },
+    {
+      "path": "outputs/turbowatch-launch/licenses/GLIGHTBOX-LICENSE.md",
+      "bytes": 1096,
+      "sha256": "41555b530e2e4e65cc9956cf581f69942fd29fac9400e76b136f504f49e157f4",
+      "git_blob": "43d17fbfc58f3f5a6e83084f55ff7c5fd6bc7cc8"
+    },
+    {
+      "path": "outputs/turbowatch-launch/licenses/STARTBOOTSTRAP-LICENSE.txt",
+      "bytes": 1091,
+      "sha256": "e8b857747301fcd4c885b3216544b18bbf60328aec2c34da614787346cf40282",
+      "git_blob": "5ff52f416ad2c5d5f875a44712cd0f5517904ed6"
+    },
+    {
+      "path": "outputs/turbowatch-launch/logo-inverse.svg",
+      "bytes": 11261,
+      "sha256": "fc45465d83361f5da627157a60e7a3a8bfcf21f0d39e636c153ca145c73a927d",
+      "git_blob": "514e932ac5aa09234e69fe0c00d5d7b2ad8dc87f"
+    },
+    {
+      "path": "outputs/turbowatch-launch/logo-primary.svg",
+      "bytes": 11261,
+      "sha256": "5974091867bd87d93d71a9d65f43bc51ac0e2172051d1e2277c96e57c7894851",
+      "git_blob": "cde70c9be529ec6575d1a48353b9c5eff127bd62"
+    },
+    {
+      "path": "outputs/turbowatch-launch/manrope.ttf",
+      "bytes": 164700,
+      "sha256": "3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6",
+      "git_blob": "75274da58537d6123b14f2cd0c355ad4681fc2b3"
+    },
+    {
+      "path": "outputs/turbowatch-launch/portrait-promo.png",
+      "bytes": 468544,
+      "sha256": "25e47171e8d79f99dd63b2f0c3fb7e0ebed4feb69f8f51827f111e044f0ef6c4",
+      "git_blob": "33a002bdcbbc4db7d90d02fd964983098bbd0484"
+    },
+    {
+      "path": "outputs/turbowatch-launch/portrait-promo.svg",
+      "bytes": 580399,
+      "sha256": "4b660b649fc051b38af0872659b6cfb93c24e8d14ebd6f8b3ee2e711bb9605ab",
+      "git_blob": "df36df6c506dbf1926b77963e5a1c275ba3bb40d"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-desktop.png",
+      "bytes": 756876,
+      "sha256": "b2ab5703c253929180908f68f41c0aff941440d66abadbd523905f851275108d",
+      "git_blob": "575bd06e2118146c9b6dfd0254c8e52cb043a838"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-feed-mobile.png",
+      "bytes": 241298,
+      "sha256": "461eaff66aaf9cd89580a72f3d95f88597159a6393c85624e1daeb970b8566bf",
+      "git_blob": "e984d6d6c8549501aafbc4a8438090f6b7e7fe77"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-feed.png",
+      "bytes": 917380,
+      "sha256": "02cef41f76b56d6759cce0c7372f74d14f89bd849f4d283ff0575ddaafe5d198",
+      "git_blob": "6854b5bcca830657aa5722ef6cdd99a398525ff2"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-mobile.png",
+      "bytes": 256270,
+      "sha256": "36bbb102ea7c9cf3b8510c03a0e3714bd162b46183a2d13a1716cf0f52d5ee7e",
+      "git_blob": "41a8695e48f6c6e45402a7ac943d97de390670ce"
+    },
+    {
+      "path": "outputs/turbowatch-launch/social-preview.png",
+      "bytes": 269820,
+      "sha256": "c2fd39da94e6881bf247416e0dadd0958a22c3408cdb802868242ef4d82586e8",
+      "git_blob": "1d815634129ef4da2973bc1dacae337a6b8c34ba"
+    },
+    {
+      "path": "outputs/turbowatch-launch/social-preview.svg",
+      "bytes": 1247389,
+      "sha256": "61b4c936b9ed32a6cce2056deebe68a3260ad3bbe7e07a0524caad757a1560e3",
+      "git_blob": "370da47e6702cc65b77f3637b3e20dba714d281e"
+    },
+    {
+      "path": "outputs/turbowatch-launch/turbowatch-launch-kit.zip",
+      "bytes": 4530618,
+      "sha256": "c7a5210f571438477328ae784dcbbaf3f7c82dd973cec0183ecfdbd7206f5e6c",
+      "git_blob": "62eca7d65fe8755560547754d4c10413fe535e4a"
+    }
+  ]
+}

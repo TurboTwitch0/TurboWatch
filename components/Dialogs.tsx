@@ -2,10 +2,11 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowUpRight, Check, Copy, Eye, EyeOff, Film, FolderHeart, ImagePlus, KeyRound, Link, LoaderCircle, Mail, Send, ShieldCheck, Sparkles, UploadCloud, X, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, Copy, Eye, EyeOff, Film, FolderHeart, ImagePlus, KeyRound, Link, LoaderCircle, Mail, Send, ShieldCheck, Sparkles, UploadCloud, X } from 'lucide-react';
 import type { Post } from '@/lib/model';
 import { useSocial } from '@/lib/store';
 import { sitePath } from '@/lib/navigation';
+import BrandMark from './BrandMark';
 
 type CloseProps = { onClose: () => void };
 
@@ -305,7 +306,7 @@ export function EditProfileDialog({ onClose }: CloseProps) {
 }
 
 function AuthBrand() {
-  return <div className="auth-brand"><span className="auth-brand-icon"><Zap size={18} fill="currentColor" /></span><span>YOUR SPACE TO CONNECT</span></div>;
+  return <div className="auth-brand"><BrandMark compact className="auth-brand-icon" /><span>YOUR SPACE TO CONNECT</span></div>;
 }
 
 function PasswordField({ label, value, onChange, busy, autoComplete = 'current-password', minimum, autofocus = false }: {

@@ -4,6 +4,10 @@ Use **one Supabase project for the whole site**. Every person signs up with thei
 
 This setup creates no demo accounts, sample posts, or shared Alex Carter login. Old activity from the browser demo was local and was never published to Supabase. Sign in with a real account and publish any posts you want other people to see.
 
+## Existing hosted verification
+
+The coordinating session matched the existing app at `https://turbo-watch-turbo-twitch.vercel.app` to project reference `tbsbuhnoteksddvmkpum` and verified its app tables, access policies, signup trigger, media bucket, Email provider, and redirect paths. Public confirmation/reset delivery is still blocked by the default sender’s project-team restriction because custom SMTP is disabled. Vercel protection prevents a full deployed browser test, and hosted environment values/direct REST exposure remain unverified. [Current status](../docs/hosted-status.md) distinguishes these limits from local application tests. Preserve this backend and its protections.
+
 ## Check the existing project first
 
 If you already have a Supabase project, compare its Project URL with the URL configured for your existing Vercel app. A generic project name or a similar table name does not establish that it belongs to this app. Do not point the site at another project or install the schema until that match is verified. [verify.sql](verify.sql) contains read-only metadata checks for the expected tables, columns, signup trigger, row-level policies, Realtime publication, and media bucket; it does not return user content or change access.

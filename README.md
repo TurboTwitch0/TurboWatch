@@ -1,6 +1,10 @@
 # TurboWatch
 
-A social discovery app for watching videos, finding inspiration, saving collections, and connecting with creators. Built with Next.js, React, TypeScript, and Supabase. Designed for desktop and mobile.
+**Follow your curiosity.** Watch short stories, discover photography, save good finds, and share a point of view. Built with Next.js, React, TypeScript, and Supabase for desktop and mobile.
+
+The original TurboWatch lightning identity now has a coordinated pine/ivory/coral system across discovery, watching, profiles, account recovery, and system states. Signed-out visitors get a useful product preview: real community posts when available, otherwise clearly labeled bundled examples. **Sign in to share** opens real account access; **See the sample library** explicitly opens the separate local preview.
+
+Reusable launch assets and a visual style guide are in [outputs/turbowatch-launch](outputs/turbowatch-launch/README.md). Download the [complete launch ZIP](outputs/turbowatch-launch/turbowatch-launch-kit.zip), or use the [asset manifest](outputs/turbowatch-launch/asset-manifest.json) for exact paths, SHA-256 hashes, and Git blob IDs. Known deployment and email-delivery limits are recorded in [docs/hosted-status.md](docs/hosted-status.md).
 
 **Real accounts setup:** Follow [supabase/SETUP.md](supabase/SETUP.md), run the complete updated [schema.sql](supabase/schema.sql), and configure the two Supabase variables in Vercel before rebuilding. The normal `/` site never signs visitors into Alex Carter. Missing configuration shows setup instructions.
 
@@ -103,7 +107,7 @@ For real accounts and shared posts/messages, follow **Enable the shared communit
 
 Future pushes to `main` deploy automatically after this repository is linked to Vercel. If the direct import link does not preselect the repository, open [Vercel New Project](https://vercel.com/new), find `TurboTwitch0/TurboWatch`, and choose **Import**.
 
-You can also deploy with Vercel CLI from this directory using your own authenticated Vercel session: `npx vercel`. No Vercel project, account, or production domain has been linked by this implementation.
+You can also deploy with Vercel CLI from this directory using your own authenticated Vercel session: `npx vercel`. The existing production address is <https://turbo-watch-turbo-twitch.vercel.app>. Its deployment protection and public email-delivery limits remain in place; see [hosted status](docs/hosted-status.md). This pass publishes source to GitHub only.
 
 ## Validation
 
@@ -137,7 +141,9 @@ npm run test:e2e -- tests/live-sync.spec.ts tests/account-recovery.spec.ts
 
 The test starts and stops its local API fixture. These values are test-only public placeholders, not real project credentials. Keep them out of production settings.
 
-The latest account/discovery improvement pass verified the production build and TypeScript, 19 production browser workflows, 10 controlled SDK authentication/synchronization cases, and responsive layouts at 320, 390, 768, and 1440 pixels. Earlier validation also covered the unchanged database schema’s 40 access checks, demo-state migration, and all 12 local videos. Live Supabase connectivity and public Vercel deployment require your project configuration and have not been verified.
+The identity/launch pass added three focused brand checks and verified eleven focused production/local-SDK scenarios, including keyboard access, real account setup, sample labeling, watch/share state, responsive layouts, and reduced-motion behavior. The final production build and canonical/social-image delivery checks passed. No backend policy or authentication code changed in this design pass.
+
+The earlier account/discovery improvement pass verified the production build and TypeScript, 19 production browser workflows, 10 controlled SDK authentication/synchronization cases, and responsive layouts at 320, 390, 768, and 1440 pixels. Earlier validation also covered the unchanged database schema’s 40 access checks, demo-state migration, and all 12 local videos. Live Supabase connectivity and public Vercel deployment require your project configuration and have not been verified.
 
 ## Project map
 
