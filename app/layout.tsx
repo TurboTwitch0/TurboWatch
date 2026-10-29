@@ -5,6 +5,9 @@ import './showcase.css';
 import './discovery-topics.css';
 import './related-stories.css';
 import './discovery.css';
+import './saved-library.css';
+import './video-player.css';
+import './social-tools.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://turbo-watch-turbo-twitch.vercel.app'),

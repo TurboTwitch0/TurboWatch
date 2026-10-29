@@ -1,0 +1,16 @@
+.feed-source-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 22px; margin: 0 0 26px; }
+.feed-source-bar > p { margin: 0; color: #5d7153; font-size: 12px; line-height: 1.7; }
+.feed-source-control { display: inline-flex; gap: 4px; padding: 5px; border: 1px solid #dce5d2; border-radius: 16px; background: #edf2e6; }
+.feed-source-control > button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 17px; border-radius: 11px; color: #526849; font-size: 13px; font-weight: 700; transition: background .18s ease, color .18s ease; }
+.feed-source-control > button:hover { background: #e0e9d6; }
+.feed-source-control > button[aria-pressed="true"] { background: var(--ink); color: #fffefa; box-shadow: 0 3px 9px #11251b14; }
+.feed-source-control > button:focus-visible { outline: 3px solid var(--coral); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .feed-source-bar { gap: 10px; margin-bottom: 24px; }
+  .feed-source-control { width: 100%; }
+  .feed-source-control > button { flex: 1; min-width: 0; padding: 10px 12px; font-size: 12px; }
+  .feed-source-bar > p { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feed-source-control > button { transition: none; }
+}

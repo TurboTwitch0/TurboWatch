@@ -96,7 +96,8 @@ test('new collections accept posts and retain their membership', async ({ page }
   await expect(page.locator('.post-card')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'A little old-school soul.', exact: true })).toBeVisible();
   await page.reload();
-  await page.locator('.board-card').filter({ hasText: 'Weekend inspiration' }).click();
+  await expect(page.getByRole('heading', { name: 'Weekend inspiration', exact: true })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('board')).toBeTruthy();
   await expect(page.locator('.post-card')).toHaveCount(1);
 });
 
@@ -183,7 +184,7 @@ test('desktop and mobile render without overflow and mobile navigation works', a
   await page.screenshot({ path: '/tmp/turbowatch-mobile.png', fullPage: true });
   const mobileNav = page.getByRole('navigation', { name: 'Mobile navigation' });
   await mobileNav.getByRole('button', { name: 'Collections', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Your kind of collection.', exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Saved library', exact: true }).getByRole('button', { name: /^All saved\b/ })).toHaveAttribute('aria-pressed', 'true');
   await mobileNav.getByRole('button', { name: 'For you', exact: true }).click();
   await page.getByRole('button', { name: 'Open Take the scenic route.', exact: true }).click();
   const detail = page.getByRole('dialog', { name: 'Take the scenic route.', exact: true });
