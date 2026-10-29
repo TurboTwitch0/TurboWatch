@@ -38,6 +38,6 @@ function PostCard({ post, index = 0, onOpen, onProfile, onShare, action }: FeedA
   }
 
 // Keep component identities stable so updates preserve media, focus, and scroll.
-export default function FeedGrid({ items, emptyTitle = 'Nothing here just yet.', emptyDescription = 'Try another search or category. Your next favorite is out there.', onExplore, ...actions }: FeedActions & { items: Post[]; emptyTitle?: string; emptyDescription?: string; onExplore: () => void }) {
-  return items.length ? <div className="masonry-grid">{items.map((post, index) => <PostCard key={post.id} post={post} index={index} {...actions} />)}</div> : <div className="empty-state"><span className="empty-icon"><Compass /></span><h2>{emptyTitle}</h2><p>{emptyDescription}</p><button className="secondary-button" onClick={onExplore}>Explore the feed <ArrowRight size={16} /></button></div>;
+export default function FeedGrid({ items, emptyTitle = 'Nothing here just yet.', emptyDescription = 'Try another search or category. Your next favorite is out there.', emptyActionLabel = 'Explore the feed', onExplore, ...actions }: FeedActions & { items: Post[]; emptyTitle?: string; emptyDescription?: string; emptyActionLabel?: string; onExplore: () => void }) {
+  return items.length ? <div className="masonry-grid">{items.map((post, index) => <PostCard key={post.id} post={post} index={index} {...actions} />)}</div> : <div className="empty-state"><span className="empty-icon"><Compass /></span><h2>{emptyTitle}</h2><p>{emptyDescription}</p><button className="secondary-button" onClick={onExplore}>{emptyActionLabel} <ArrowRight size={16} /></button></div>;
 }

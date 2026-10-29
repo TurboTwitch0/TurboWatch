@@ -1,0 +1,72 @@
+/* Everyday discovery tools share the same calm palette as the content stage. */
+.page-intro h1 { overflow-wrap: anywhere; }
+.search-result-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 26px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.search-result-controls > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 10px 15px;
+  border: 1px solid #dce5d1;
+  border-radius: 13px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  transition: background .18s ease, border-color .18s ease;
+}
+.search-result-controls > button > span {
+  min-width: 23px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: #edf2e4;
+  color: #48613d;
+  font-size: 10px;
+}
+.search-result-controls > button:hover { border-color: #92ac7c; background: #eef3e6; }
+.search-result-controls > button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fffefa; }
+.search-result-controls > button[aria-pressed="true"] > span { background: #ffffff22; color: #fffefa; }
+.search-result-controls > button:focus-visible,
+.discovery-filter-summary > button:focus-visible { outline: 3px solid var(--coral); outline-offset: 3px; }
+.discovery-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -3px 0 23px;
+  padding: 10px 12px;
+  border: 1px solid #dfe7d5;
+  border-radius: 14px;
+  background: #edf2e6;
+}
+.discovery-filter-summary > span { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; color: #47613b; }
+.discovery-filter-summary > span > svg { flex-shrink: 0; }
+.discovery-filter-summary > span > span { padding: 5px 9px; border: 1px solid #d6e1c9; border-radius: 7px; background: #f9faf5; font-size: 11px; overflow-wrap: anywhere; }
+.discovery-filter-summary > button { display: flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 7px; min-height: 44px; padding: 8px 10px; border-radius: 9px; color: var(--ink); font-size: 12px; font-weight: 650; }
+.discovery-filter-summary > button:hover { background: #dfe8d5; }
+#discovery-feed { scroll-margin-top: 115px; }
+#discovery-feed:focus-visible { outline: 2px solid #7f9d6b; outline-offset: 7px; border-radius: 9px; }
+@media (max-width: 600px) {
+  .creator-strip { margin-right: 0; padding-right: 0; }
+  .search-result-controls { gap: 6px; margin-bottom: 24px; padding-bottom: 18px; }
+  .search-result-controls > button { flex: 1; min-width: 0; gap: 6px; padding: 10px 8px; font-size: 11px; }
+  .search-result-controls > button > svg { display: none; }
+  .search-result-controls > button > span { min-width: 20px; padding: 3px 5px; }
+  .discovery-filter-summary { align-items: flex-start; gap: 7px; padding: 9px; }
+  .discovery-filter-summary > span { gap: 5px; padding-top: 7px; }
+  .discovery-filter-summary > span > svg { display: none; }
+  .discovery-filter-summary > span > span { font-size: 10px; padding: 5px 7px; }
+  .discovery-filter-summary > button { gap: 4px; padding: 8px; font-size: 11px; }
+  #discovery-feed { scroll-margin-top: 140px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-result-controls > button { transition: none; }
+}

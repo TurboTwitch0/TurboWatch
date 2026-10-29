@@ -12,7 +12,9 @@ Original reusable identity and launch artwork for the existing TurboWatch app. T
 | `product-desktop.png` | 1440 × 1050 | Actual redesigned local product screen |
 | `product-mobile.png` | 390 × 844 | Actual introductory local guest preview |
 | `showcase-desktop.png`, `showcase-mobile.png` | PNG | Current cinematic discovery stage, captured from the real local app |
-| `product-feed-mobile.png` | 390 × 844 | Additional actual sample-feed screen; not used in promotional compositions |
+| `product-feed.png`, `product-feed-mobile.png` | 1440 × 1050 / 390 × 844 | Current actual sample-feed screens; not used in promotional compositions |
+| `product-explore.png`, `product-explore-mobile.png` | 1440 × 1050 / 390 × 844 | Current visual topic browsing, with clearly labeled sample content |
+| `product-search-mobile.png` | 390 × 844 | Actual People search and result-type controls |
 | `logo-primary.svg`, `logo-inverse.svg`, `icon.svg` | SVG | Reusable logo variants copied from the app brand assets |
 | `launch-copy.md` | Markdown | Concise prepared copy with a fact-check note |
 | `manrope.ttf`, `MANROPE-OFL.txt` | TTF / text | Bundled open-source typography and its license |
@@ -22,6 +24,8 @@ Original reusable identity and launch artwork for the existing TurboWatch app. T
 The SVG compositions embed their screenshot and Manrope font data so they travel as standalone files. The PNG files are exact-size raster exports. The screenshots show the actual local application; **sample content is labeled and is not evidence of published community posts**.
 
 The current product presentation adds a cinematic content stage: a focused story, dimensional neighboring covers, and explicit browsing controls. Its watch/open action leads into the existing product. The stage does not autoplay or replace the everyday feed, search, sharing, or account tools. Keyboard, touch, narrow-screen, and reduced-motion paths remain part of the interface. The portrait composition uses the current guest showcase capture rather than a sample feed with fictional view/like totals.
+
+The current discovery upgrade also adds topic covers that filter real posts, focused People/Posts search, a filter reset that keeps the query, and deliberate related-story actions in the viewer. The new screenshots are actual local UI with the sample community clearly labeled. Existing identity artwork and guest-preview promotional compositions are preserved. `asset-delta.json` lists incremental asset changes from commit `5a14bb336ed3b2c3afaaaf69f978e758f9ce2878`; `asset-manifest.json` contains the full current export inventory.
 
 ## Identity
 

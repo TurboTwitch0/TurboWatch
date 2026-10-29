@@ -16,9 +16,9 @@
     },
     {
       "path": "outputs/turbowatch-launch/README.md",
-      "bytes": 5197,
-      "sha256": "cb4d8a2e0a1a5a4651c913ca031a57b8e92023c2c422aa4c05e6c19993e7f299",
-      "git_blob": "8991374937229eaa0b2bc864f678f5e2e2a062f7"
+      "bytes": 6012,
+      "sha256": "05083878276edbf8aec95f6acffe138e8df13901caac58161e2f87fa20304e8d",
+      "git_blob": "33c1155e6eecbccd5c47e2e6032d3d78bc2d1d4b"
     },
     {
       "path": "outputs/turbowatch-launch/brand-sheet.png",
@@ -93,22 +93,40 @@
       "git_blob": "6c6cfe7b7870010287f21e9990f3f3b8924686e1"
     },
     {
+      "path": "outputs/turbowatch-launch/product-explore-mobile.png",
+      "bytes": 237896,
+      "sha256": "8b15405822f266a34a798bba3a24174ba703700bdc3ba7d04213b4f540958ecd",
+      "git_blob": "9e3c1941b0f332921fbafeccb206b68176b8df64"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-explore.png",
+      "bytes": 762789,
+      "sha256": "436ca434405b331b905987af5ce64f6df429e0e48a3dd37fec7756e8c2b94d1f",
+      "git_blob": "1644a21e6a3ca3673d038b116ef96d09afd82201"
+    },
+    {
       "path": "outputs/turbowatch-launch/product-feed-mobile.png",
-      "bytes": 240888,
-      "sha256": "8fbbad2d639ad6f9c4179f6b27380813e18e02692c4ce329a2b6e5f838bdb039",
-      "git_blob": "3df287c3c227a1dccf06581abc7450c613a2e553"
+      "bytes": 228027,
+      "sha256": "8ef516f69edc3c1b358748600ea398b8fb4ec8c72ac3f62bb8bd5bcc276de30e",
+      "git_blob": "48ca1e447530383c46cf4e0f222d64f1ad771dee"
     },
     {
       "path": "outputs/turbowatch-launch/product-feed.png",
-      "bytes": 788113,
-      "sha256": "97ec56bf1ac7f1cf4376b8a55c124eb7c491143e7b8a8c1e763175ef1ebbf600",
-      "git_blob": "dd9751955a49921055deb446c4fe9e22c8070738"
+      "bytes": 779022,
+      "sha256": "6207792ee31b482ca5f782228c989d517fbe10b4ff845718d7498f087bc45d18",
+      "git_blob": "68c3bbfc74435ab6292dc80e87dcbc153beb2756"
     },
     {
       "path": "outputs/turbowatch-launch/product-mobile.png",
       "bytes": 241325,
       "sha256": "aa81d061014f4caa1be28f4f748fb031c3eabd612cdc0bf399634868701f16fa",
       "git_blob": "39901e4bdd617c35be9ee13de424cd6f635241ab"
+    },
+    {
+      "path": "outputs/turbowatch-launch/product-search-mobile.png",
+      "bytes": 88351,
+      "sha256": "66ab4889d435dc1893456e42b1e97226478236800901ca4ec6ccea8efbd325a6",
+      "git_blob": "260a3909f74a44059228feeec217760526e78661"
     },
     {
       "path": "outputs/turbowatch-launch/showcase-desktop.png",
@@ -136,9 +154,9 @@
     },
     {
       "path": "outputs/turbowatch-launch/turbowatch-launch-kit.zip",
-      "bytes": 5202647,
-      "sha256": "6f18e76c5b5f095af1fc6d7eff0c0f5f211a911dfe9a339493f8e9f3a5c6ebc4",
-      "git_blob": "1c2f66166d9bfb5cbd9feab5ac97554a384c3538"
+      "bytes": 6259107,
+      "sha256": "fe8687632b82a158d4e6a82a9ceec9aa6425ca6675988796f89d001e86430772",
+      "git_blob": "794a4262508f818090614ef04f82d53bd303b0ce"
     }
   ]
 }

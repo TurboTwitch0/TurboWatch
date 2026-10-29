@@ -88,13 +88,21 @@ Current desktop/mobile showcase screenshots are in [the export kit](outputs/turb
 
 The showcase delta passed the production build and ten focused browser scenarios, including real open/watch actions, scoped keyboard/touch controls, stable selection during incoming posts, preserved player/share state, responsive layouts, and reduced-motion behavior. Current asset changes and removals are listed in [asset-delta.json](outputs/turbowatch-launch/asset-delta.json). Backend and account behavior remain unchanged.
 
+## Explore and keep watching
+
+Explore offers up to five visual topic entrances from the actual loaded public library, with current post counts. Choosing a topic filters the existing feed and moves keyboard focus to it. The category row still offers every loaded category. Topics instantiate cover images only, and the layout fits phone and desktop widths without decorative scrolling.
+
+The post viewer offers up to three related public stories, using shared categories/tags and a preference for videos when watching a video. Nothing opens or advances until you select it. Opening another story updates the existing page and its shareable URL; that story gets its own comment field. Likes and other updates keep the current player and unfinished draft in place. No private messages, saved collections, or predictive scores are used for suggestions.
+
+The discovery upgrade passed the production build/TypeScript, fourteen focused browser scenarios, and the two existing search unit checks. Checks cover result history, filter recovery, actual topic actions, deliberate related-story playback, preserved drafts/media, 320/390/1440px layouts, keyboard controls, and reduced motion. The hosted account/email/protection limits are unchanged. New current Explore/search captures and a refreshed ZIP/manifest are in [the export kit](outputs/turbowatch-launch/README.md).
+
 ## Account recovery
 
 Use **Forgot password?** on sign-in to request a real Supabase reset email. The reset screen supports password confirmation, show/hide controls, recoverable errors, and refresh in the same tab. A valid recovery session is required before changing a password; an expired link or an unrelated existing account cannot authorize a reset. Set the deployed `/?auth=recovery` URL in Supabase’s allowed redirects as described in [the setup guide](supabase/SETUP.md). The account menu exposes sign-out from every view, including when the account is authenticated but its profile cannot be loaded.
 
 ## Search
 
-Search finds published posts by title, description, category, tags (including `#tag`), and creator name or `@username`. Matching people appear above the post results. Searches ignore case and accents and support multiple words. Changing the search clears a stale category filter. Use **All posts / Photos / Videos** and **Recommended / Newest / Most liked** to narrow the loaded feed. Category, media, and sort choices are preserved in the URL and restored by reload/back/forward. The `q` URL parameter preserves the query when you reload or share a search link, and browser back/forward restores it without refreshing the document. Search on the normal site reads the loaded shared feed (up to the latest 200 posts) and available public profiles. Explicit sample-mode searches stay within the fictional library.
+Search finds published posts by title, description, category, tags (including `#tag`), and creator name or `@username`. Choose **All results**, **Posts**, or **People** to focus the search. Matching people open their actual public profiles. The result type is preserved in the URL and restored by reload/back/forward. Commas can separate hashtags, handles, and search words. Searches ignore case and accents and support multiple words. Changing the search clears a stale category filter. Use **All posts / Photos / Videos** and **Recommended / Newest / Most liked** to narrow the loaded feed. **Clear filters** resets category, format, and sorting while keeping the query and returning focus to search. Category, media, and sort choices are preserved in the URL and restored by reload/back/forward. The `q` URL parameter preserves the query when you reload or share a search link, and browser back/forward restores it without refreshing the document. Search on the normal site reads the loaded shared feed (up to the latest 200 posts) and available public profiles. Explicit sample-mode searches stay within the fictional library.
 
 ## Shared interactions without page refreshes
 
