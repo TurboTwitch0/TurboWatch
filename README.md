@@ -147,6 +147,8 @@ You can also deploy with Vercel CLI from this directory using your own authentic
 
 ## Validation
 
+The November 21, 2026 security maintenance raises the Next.js minimum to `^16.4.6` and locks version `16.4.6`, replacing `16.4.3`. Both production-only and full `npm audit` report zero vulnerabilities. The isolated production build, TypeScript, nine demo-state tests, two search tests, 40 schema checks, and 20 production browser scenarios passed. The patch stays within Next.js 16 and preserves the existing Node.js 24, React, application configuration, authentication, and database setup; no hosted service was used for verification.
+
 ```sh
 npm run typecheck
 npm run test:schema
