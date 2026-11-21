@@ -166,7 +166,7 @@ export interface SocialContextValue extends SocialState {
   addComment: (postId: string, text: string) => Promise<void>;
   createPost: (input: CreatePostInput) => Promise<Post>;
   updateProfile: (patch: ProfilePatch) => Promise<void>;
-  sendMessage: (recipientId: string, text: string) => Promise<void>;
+  sendMessage: (recipientId: string, text: string, messageId?: string) => Promise<void>;
   createBoard: (name: string) => Promise<Board>;
   saveToBoard: (postId: string, boardId: string) => Promise<void>;
   markConversationRead: (creatorId: string) => Promise<void>;
@@ -764,17 +764,31 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     await refreshAfterMutation(user.id);
   });
 
-  const sendMessage = (recipientId: string, text: string) => run(async () => {
+  const sendMessage = (recipientId: string, text: string, messageId = crypto.randomUUID()) => run(async () => {
     const user = requireUser();
     if (recipientId === user.id || !stateRef.current.creators.some((creator) => creator.id === recipientId)) throw new Error('Choose another creator to message.');
     const clean = textValue(text, 'Message', 2000);
-    const message: Message = { id: crypto.randomUUID(), senderId: user.id, recipientId, text: clean, createdAt: new Date().toISOString() };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId)) throw new Error('This message request is invalid. Please try again.');
+    const message: Message = { id: messageId, senderId: user.id, recipientId, text: clean, createdAt: new Date().toISOString() };
     if (mode === 'demo') {
+      const existing = stateRef.current.messages.find(item => item.id === message.id);
+      if (existing) {
+        if (existing.senderId !== user.id || existing.recipientId !== recipientId || existing.text !== clean) throw new Error('This request belongs to a different message.');
+        return;
+      }
       commitDemo((previous) => ({ ...previous, messages: [...previous.messages, message] }));
       return;
     }
-    const { error: failure } = await getSupabase()!.from('messages').insert({ id: message.id, sender_id: user.id, recipient_id: recipientId, text: clean });
-    if (failure) throw new Error(failure.message);
+    const db = getSupabase()!;
+    const { error: failure } = await db.from('messages').insert({ id: message.id, sender_id: user.id, recipient_id: recipientId, text: clean });
+    if (failure) {
+      if (failure.code !== '23505') throw new Error(failure.message);
+      if (modeRef.current !== 'live' || liveUserId.current !== user.id) throw new DOMException('This action belongs to a previous session.', 'AbortError');
+      // A lost response can leave the original INSERT committed. Confirm its
+      // exact contents under the current account's RLS before completing retry.
+      const { data: existing, error: lookupError } = await db.from('messages').select('id,sender_id,recipient_id,text').eq('id', message.id).eq('sender_id', user.id).maybeSingle();
+      if (lookupError || !existing || existing.recipient_id !== recipientId || existing.text !== clean) throw new Error(failure.message);
+    }
     await refreshAfterMutation(user.id);
   });
 

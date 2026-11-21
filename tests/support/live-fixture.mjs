@@ -184,6 +184,11 @@ export async function startSupabaseFixture({ port = 4400, appOrigin = 'http://12
       if (request.method === 'POST') {
         const rows = (Array.isArray(body) ? body : [body]).map(row => ({ created_at: new Date().toISOString(), ...row }));
         if (rows.some(row => !owned(table, row, user))) { reply(403, { message: 'The fixture rejected another user’s write.' }); return; }
+        // Model the actual messages primary key: INSERT replay is a conflict,
+        // not an upsert that silently changes an existing private message.
+        if (table === 'messages' && rows.some(row => tables.messages.some(existing => existing.id === row.id))) {
+          reply(409, { code: '23505', message: 'duplicate key value violates messages_pkey' }); return;
+        }
         for (const row of rows) upsert(table, row);
         if (String(request.headers.prefer).includes('return=representation')) reply(201, rows);
         else reply(201, null);

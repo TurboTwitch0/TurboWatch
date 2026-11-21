@@ -120,6 +120,8 @@ Finishing a publish, profile update, or collection save cannot dismiss a differe
 
 These cases are covered with the existing isolated Supabase HTTP fixture and a delayed local upload. Hosted accounts, email delivery, deployment protection, and database policies remain unchanged.
 
+Messages also preserve follow-up text edited while a send is pending. Retrying an unchanged draft after a lost server response reuses its request ID; an existing row only confirms delivery when its sender, recipient, and text match. Editing the draft creates a new message request, and a previous account's completion cannot clear the new account's draft.
+
 ## Shared interactions without page refreshes
 
 With the Supabase setup complete, signed-in users share real posts, likes, comments, follows, reposts, and direct messages. Post owners receive activity notifications, and reposts appear on public profiles. Saved posts and collections remain private; messages are visible only to their participants.
@@ -170,7 +172,7 @@ Then run:
 
 ```sh
 TEST_BASE_URL=http://127.0.0.1:3002 LIVE_TEST_BASE_URL=http://127.0.0.1:3002 \
-npm run test:e2e -- tests/live-sync.spec.ts tests/account-recovery.spec.ts tests/dialog-lifetime.spec.ts
+npm run test:e2e -- tests/live-sync.spec.ts tests/account-recovery.spec.ts tests/dialog-lifetime.spec.ts tests/message-lifetime.spec.ts
 ```
 
 The test starts and stops its local API fixture. These values are test-only public placeholders, not real project credentials. Keep them out of production settings.
