@@ -10,6 +10,13 @@ import BrandMark from './BrandMark';
 
 type CloseProps = { onClose: () => void };
 
+/** Async work may finish after this form is replaced by another dialog. */
+function useDialogLifetime() {
+  const active = useRef(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  return active;
+}
+
 type ActiveDialog = {
   panel: HTMLDivElement;
   backdrop: HTMLDivElement;
@@ -178,6 +185,7 @@ function validMediaUrl(value: string): boolean {
 }
 
 export function CreateDialog({ onClose, onCreated }: CloseProps & { onCreated?: (post: Post) => void }) {
+  const active = useDialogLifetime();
   const { createPost, uploadMedia, mode, user } = useSocial();
   const [type, setType] = useState<'image' | 'video'>('image');
   const [title, setTitle] = useState('');
@@ -219,7 +227,9 @@ export function CreateDialog({ onClose, onCreated }: CloseProps & { onCreated?: 
   };
 
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setError('');
+    event.preventDefault();
+    if (busy) return;
+    setError('');
     if (!user) { setError('Sign in before publishing a post.'); return; }
     if (!title.trim()) { setError('Give your post a title.'); return; }
     if (!file && !validMediaUrl(url)) { setError('Add an image or video file, or a valid media URL.'); return; }
@@ -227,15 +237,15 @@ export function CreateDialog({ onClose, onCreated }: CloseProps & { onCreated?: 
     setBusy(true);
     try {
       const mediaUrl = file ? await uploadMedia(file) : url.trim();
+      if (!active.current) return;
       const post = await createPost({
         title: title.trim(), description: description.trim(), mediaType: type,
         mediaUrl, thumbnail: type === 'image' ? mediaUrl : thumbnail.trim(),
         category, tags: description.match(/#[\p{L}\p{N}_]+/gu)?.map(tag => tag.slice(1)) ?? [], aspect
       });
-      onCreated?.(post);
-      onClose();
-    } catch (caught) { setError(errorMessage(caught)); }
-    finally { setBusy(false); }
+      if (active.current) { onCreated?.(post); onClose(); }
+    } catch (caught) { if (active.current) setError(errorMessage(caught)); }
+    finally { if (active.current) setBusy(false); }
   };
 
   return <Dialog title="Make something worth sharing." onClose={onClose} className="create-dialog">
@@ -273,6 +283,7 @@ export function CreateDialog({ onClose, onCreated }: CloseProps & { onCreated?: 
 }
 
 export function EditProfileDialog({ onClose }: CloseProps) {
+  const active = useDialogLifetime();
   const { user, updateProfile } = useSocial();
   const [name, setName] = useState(user?.name ?? '');
   const [username, setUsername] = useState(user?.username ?? '');
@@ -281,16 +292,18 @@ export function EditProfileDialog({ onClose }: CloseProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setError('');
+    event.preventDefault();
+    if (busy) return;
+    setError('');
     if (!name.trim()) { setError('Add your name.'); return; }
     if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) { setError('Your username needs 3–24 letters, numbers, or underscores.'); return; }
     if (avatar && !validMediaUrl(avatar)) { setError('Use a valid image URL for your avatar.'); return; }
     setBusy(true);
     try {
       await updateProfile({ name: name.trim(), username: username.trim().toLowerCase(), bio: bio.trim(), avatar: avatar.trim() });
-      onClose();
-    } catch (caught) { setError(errorMessage(caught)); }
-    finally { setBusy(false); }
+      if (active.current) onClose();
+    } catch (caught) { if (active.current) setError(errorMessage(caught)); }
+    finally { if (active.current) setBusy(false); }
   };
   return <Dialog title="A little more you." onClose={onClose}>
     <p className="dialog-intro">Make your corner of TurboWatch feel like home.</p>
@@ -436,17 +449,20 @@ export function PasswordRecoveryDialog({ onClose, onRequestReset }: CloseProps &
 }
 
 export function NewBoardDialog({ onClose }: CloseProps) {
+  const active = useDialogLifetime();
   const { createBoard } = useSocial();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setError('');
+    event.preventDefault();
+    if (busy) return;
+    setError('');
     if (!name.trim()) { setError('Give your collection a name.'); return; }
     setBusy(true);
-    try { await createBoard(name.trim()); onClose(); }
-    catch (caught) { setError(errorMessage(caught)); }
-    finally { setBusy(false); }
+    try { await createBoard(name.trim()); if (active.current) onClose(); }
+    catch (caught) { if (active.current) setError(errorMessage(caught)); }
+    finally { if (active.current) setBusy(false); }
   };
   return <Dialog title="A home for your next obsession." onClose={onClose}>
     <div className="dialog-illustration"><FolderHeart size={34} strokeWidth={1.5} /></div>

@@ -114,6 +114,12 @@ The native video player now explains loading/buffering and media failures. **Ret
 
 This pass passed the production build/TypeScript and 22 focused browser scenarios, including all 12 local video decodes, actual phone taps, failed-media recovery, covered-player behavior, follow changes, private library navigation, stable watching/search, and 320/390/1440px keyboard/reduced-motion checks. The database, authentication, hosted email setup, and Vercel protection are unchanged; their remaining hosted limits still apply.
 
+## Keeping drafts during slow saves
+
+Finishing a publish, profile update, or collection save cannot dismiss a different dialog opened afterward. Closing a publishing form while its file is still being read or uploaded stops it before a new post is created; a post already submitted to the server may still finish. Collection and profile requests already submitted continue normally without replacing a newer draft.
+
+These cases are covered with the existing isolated Supabase HTTP fixture and a delayed local upload. Hosted accounts, email delivery, deployment protection, and database policies remain unchanged.
+
 ## Shared interactions without page refreshes
 
 With the Supabase setup complete, signed-in users share real posts, likes, comments, follows, reposts, and direct messages. Post owners receive activity notifications, and reposts appear on public profiles. Saved posts and collections remain private; messages are visible only to their participants.
@@ -164,7 +170,7 @@ Then run:
 
 ```sh
 TEST_BASE_URL=http://127.0.0.1:3002 LIVE_TEST_BASE_URL=http://127.0.0.1:3002 \
-npm run test:e2e -- tests/live-sync.spec.ts tests/account-recovery.spec.ts
+npm run test:e2e -- tests/live-sync.spec.ts tests/account-recovery.spec.ts tests/dialog-lifetime.spec.ts
 ```
 
 The test starts and stops its local API fixture. These values are test-only public placeholders, not real project credentials. Keep them out of production settings.
