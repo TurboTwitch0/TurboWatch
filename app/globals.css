@@ -967,3 +967,13 @@ button{transition:background .2s ease,color .2s ease,border-color .2s ease,box-s
 }
 .auth-brand .brand-lockup.is-compact .brand-symbol{width:32px;height:32px}
 .page-footer .footer-lockup>.brand-wordmark{font-weight:750}
+
+/* Phone navigation shares the dialog focus stack; desktop remains a sidebar. */
+.sidebar-close{display:none}
+@media(max-width:600px){
+  .sidebar{visibility:hidden;overflow-y:auto;overscroll-behavior:contain}
+  .sidebar.mobile-open{visibility:visible}
+  .sidebar.mobile-open>*{flex-shrink:0}
+  .sidebar-container.is-open{position:fixed;inset:0;z-index:1000}
+  .sidebar-close{position:absolute;right:10px;top:10px;display:flex;width:44px;height:44px;z-index:1}
+}

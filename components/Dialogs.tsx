@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowUpRight, Check, Copy, Eye, EyeOff, Film, FolderHeart, ImagePlus, KeyRound, Link, LoaderCircle, Mail, Send, ShieldCheck, Sparkles, UploadCloud, X } from 'lucide-react';
 import type { Post } from '@/lib/model';
@@ -18,16 +18,21 @@ function useDialogLifetime() {
 }
 
 type ActiveDialog = {
-  panel: HTMLDivElement;
-  backdrop: HTMLDivElement;
+  panel: HTMLElement;
+  backdrop: HTMLElement;
   close: () => void;
   restoreFocus: HTMLElement | null;
   restoreOwner?: ActiveDialog;
+  persistentPanel?: boolean;
 };
 
 // Keep one keyboard/focus owner even when a dialog opens another dialog.
 const activePanels: ActiveDialog[] = [];
 let bodyOverflow: { value: string; priority: string } | null = null;
+
+function visibleFocusTarget(element: HTMLElement | null | undefined): element is HTMLElement {
+  return !!element?.isConnected && element.getClientRects().length > 0 && !element.matches(':disabled') && getComputedStyle(element).visibility !== 'hidden';
+}
 
 function focusableElements(panel: HTMLElement): HTMLElement[] {
   return Array.from(panel.querySelectorAll<HTMLElement>(
@@ -113,15 +118,23 @@ function registerDialog(entry: ActiveDialog) {
     if (index < 0) return;
     const wasTop = index === activePanels.length - 1;
     activePanels.splice(index, 1);
+    entry.panel.inert = false;
+    entry.backdrop.inert = false;
     // A parent can unmount first. Its child's final focus target must survive it.
     for (const remaining of activePanels) {
       if (remaining.restoreOwner === entry || (remaining.restoreFocus && entry.panel.contains(remaining.restoreFocus))) {
-        remaining.restoreFocus = entry.restoreFocus;
+        // A phone drawer becomes the desktop sidebar without unmounting.
+        // Its visible child opener remains a better return target than the
+        // now-hidden phone menu button. Removed/hidden parents still unwind.
+        const target = remaining.restoreFocus;
+        if (!entry.persistentPanel || !visibleFocusTarget(target)) {
+          remaining.restoreFocus = entry.persistentPanel
+            ? focusableElements(entry.panel)[0] ?? entry.restoreFocus
+            : entry.restoreFocus;
+        }
         remaining.restoreOwner = entry.restoreOwner;
       }
     }
-    entry.panel.inert = false;
-    entry.backdrop.inert = false;
     entry.panel.removeAttribute('aria-hidden');
     entry.panel.removeAttribute('aria-modal');
     entry.backdrop.style.removeProperty('z-index');
@@ -133,9 +146,28 @@ function registerDialog(entry: ActiveDialog) {
       if (bodyOverflow?.value) document.body.style.setProperty('overflow', bodyOverflow.value, bodyOverflow.priority);
       else document.body.style.removeProperty('overflow');
       bodyOverflow = null;
-      if (wasTop && entry.restoreFocus?.isConnected) entry.restoreFocus.focus({ preventScroll: true });
+      const target = entry.persistentPanel && !visibleFocusTarget(entry.restoreFocus)
+        ? focusableElements(entry.panel)[0]
+        : entry.restoreFocus;
+      if (wasTop && visibleFocusTarget(target)) target.focus({ preventScroll: true });
     } else if (wasTop) focusDialog(top, entry.restoreFocus);
   };
+}
+
+/** Share one focus owner across dialogs and the phone navigation drawer. */
+export function useModalPanel(panel: RefObject<HTMLElement | null>, backdrop: RefObject<HTMLElement | null>, open: boolean, onClose: () => void, persistentPanel = false) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!open || !panel.current || !backdrop.current) return;
+    return registerDialog({
+      panel: panel.current,
+      backdrop: backdrop.current,
+      close: () => close.current(),
+      restoreFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+      persistentPanel,
+    });
+  }, [open, panel, backdrop, persistentPanel]);
 }
 
 export function Dialog({ title, onClose, children, className = '' }: CloseProps & { title: string; children: ReactNode; className?: string }) {
@@ -147,15 +179,7 @@ export function Dialog({ title, onClose, children, className = '' }: CloseProps 
   close.current = onClose;
 
   useEffect(() => { setMounted(true); }, []);
-  useEffect(() => {
-    if (!mounted || !panel.current || !backdrop.current) return;
-    return registerDialog({
-      panel: panel.current,
-      backdrop: backdrop.current,
-      close: () => close.current(),
-      restoreFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
-    });
-  }, [mounted]);
+  useModalPanel(panel, backdrop, mounted, onClose);
 
   if (!mounted) return null;
   return createPortal(

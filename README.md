@@ -122,6 +122,14 @@ These cases are covered with the existing isolated Supabase HTTP fixture and a d
 
 Messages also preserve follow-up text edited while a send is pending. Retrying an unchanged draft after a lost server response reuses its request ID; an existing row only confirms delivery when its sender, recipient, and text match. Editing the draft creates a new message request, and a previous account's completion cannot clear the new account's draft.
 
+## Phone navigation and comment drafts
+
+The phone drawer now owns keyboard focus, locks background scrolling, and closes with Escape, its visible close button, or the outside backdrop. Shorter screens can scroll to every navigation and account control. Choosing a destination moves focus to its content; closing a nested form returns to its opener. Resizing to desktop releases the drawer while preserving an open form and its correct desktop return target. Opening navigation pauses a covered short, then resumes only a video that had been playing.
+
+A slow comment submission clears only the unchanged draft that was sent. Follow-up edits survive, including text edited away and back to the same wording. Failed requests keep the draft available; closing a story or changing account prevents an older request from changing the next comment form. The form exposes its pending state without blocking typing.
+
+The focused browser checks are in [mobile-navigation.spec.ts](tests/mobile-navigation.spec.ts) and [comment-lifetime.spec.ts](tests/comment-lifetime.spec.ts). Comment timing checks use the existing localhost Supabase HTTP fixture with the real client SDK; they do not send hosted comments or verify hosted account access. No database, authentication, email, or hosting configuration changes are required for these UI repairs.
+
 ## Shared interactions without page refreshes
 
 With the Supabase setup complete, signed-in users share real posts, likes, comments, follows, reposts, and direct messages. Post owners receive activity notifications, and reposts appear on public profiles. Saved posts and collections remain private; messages are visible only to their participants.
