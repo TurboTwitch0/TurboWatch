@@ -261,6 +261,7 @@ export default function TurboWatch() {
   const shorts = useMemo(() => posts.filter(p => p.mediaType === 'video'), [posts]);
   const short = shorts.find(post => post.id === selectedShortId) || shorts[0];
   const shortIndex = Math.max(0, shorts.findIndex(post => post.id === short?.id));
+  const shortCovered = Boolean(mobileMenu || popup || selectedPostId || sharePost || social.recoveryRequested);
   useEffect(() => {
     if (!shorts.some(post => post.id === selectedShortId)) setSelectedShortId(shorts[0]?.id || null);
   }, [shorts, selectedShortId]);
@@ -271,7 +272,7 @@ export default function TurboWatch() {
     });
   }
   useEffect(() => {
-    if (view !== 'shorts' || !shorts.length || popup || selectedPostId || sharePost || social.recoveryRequested) return;
+    if (view !== 'shorts' || !shorts.length || shortCovered) return;
     const keyboard = (event: KeyboardEvent) => {
       const target = event.target;
       if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, video'))) return;
@@ -283,7 +284,7 @@ export default function TurboWatch() {
     };
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [view, shorts, popup, selectedPostId, sharePost, social.recoveryRequested]);
+  }, [view, shorts, shortCovered]);
 
   const profile = creatorId ? findCreator(creatorId) : user;
   const isOwnProfile = !!profile && user?.id === profile.id;
@@ -349,7 +350,7 @@ export default function TurboWatch() {
             if (!start || !touch) return;
             const dy = start.y - touch.clientY, dx = start.x - touch.clientX;
             if (Math.abs(dy) > 55 && Math.abs(dy) > Math.abs(dx) * 1.25) stepShort(dy > 0 ? 1 : -1);
-          }}><VideoPlayer key={short.id} src={short.mediaUrl} poster={short.thumbnail} title={short.title} autoPlay loop muted={muted} variant="short" suspended={!!(mobileMenu || popup || selectedPostId || sharePost || social.recoveryRequested)} /><div className="short-player-top"><span><Zap size={15} fill="currentColor" /> turboshorts</span><button aria-label={muted ? 'Unmute video' : 'Mute video'} className="glass-button" onClick={() => setMuted(!muted)}>{muted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button></div></div><div className="short-actions"><ActionRound label={likedIds.includes(short.id) ? 'Unlike video' : 'Like video'} active={likedIds.includes(short.id)} icon={<Heart fill={likedIds.includes(short.id) ? 'currentColor' : 'none'} />} text={number(short.likes)} onClick={() => void action(() => social.toggleLike(short.id))} /><ActionRound label="Comment on video" icon={<MessageCircle />} text="Discuss" onClick={() => openPost(short)} /><ActionRound label="Repost video" active={repostedIds.includes(short.id)} icon={<Repeat2 />} text="Repost" onClick={() => void action(() => social.toggleRepost(short.id), repostedIds.includes(short.id) ? 'Repost removed' : 'Reposted to your profile')} /><ActionRound label="Share video" icon={<ArrowUpRight />} text="Share" onClick={() => setSharePost(short)} /><div className="short-navigation" title="Swipe up or down, or use the arrow keys"><button className="icon-button" aria-label="Previous short" onClick={() => stepShort(-1)}><ArrowUp size={19} /></button><button className="icon-button" aria-label="Next short" onClick={() => stepShort(1)}><ArrowDown size={19} /></button><span className="shorts-hint">Swipe or use ↑ ↓</span></div></div></section> : <Empty icon={<Clapperboard />} title="Your next story starts here." description="Share the first video and give this space some energy." action={<button className="primary-button" onClick={() => setPopup(user ? 'create' : 'auth')}>Create a video <Plus size={16} /></button>} />}</>}
+          }}><VideoPlayer key={short.id} src={short.mediaUrl} poster={short.thumbnail} title={short.title} autoPlay loop muted={muted} variant="short" suspended={shortCovered} /><div className="short-player-top"><span><Zap size={15} fill="currentColor" /> turboshorts</span><button aria-label={muted ? 'Unmute video' : 'Mute video'} className="glass-button" onClick={() => setMuted(!muted)}>{muted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button></div></div><div className="short-actions"><ActionRound label={likedIds.includes(short.id) ? 'Unlike video' : 'Like video'} active={likedIds.includes(short.id)} icon={<Heart fill={likedIds.includes(short.id) ? 'currentColor' : 'none'} />} text={number(short.likes)} onClick={() => void action(() => social.toggleLike(short.id))} /><ActionRound label="Comment on video" icon={<MessageCircle />} text="Discuss" onClick={() => openPost(short)} /><ActionRound label="Repost video" active={repostedIds.includes(short.id)} icon={<Repeat2 />} text="Repost" onClick={() => void action(() => social.toggleRepost(short.id), repostedIds.includes(short.id) ? 'Repost removed' : 'Reposted to your profile')} /><ActionRound label="Share video" icon={<ArrowUpRight />} text="Share" onClick={() => setSharePost(short)} /><div className="short-navigation" title="Swipe up or down, or use the arrow keys"><button className="icon-button" aria-label="Previous short" onClick={() => stepShort(-1)}><ArrowUp size={19} /></button><button className="icon-button" aria-label="Next short" onClick={() => stepShort(1)}><ArrowDown size={19} /></button><span className="shorts-hint">Swipe or use ↑ ↓</span></div></div></section> : <Empty icon={<Clapperboard />} title="Your next story starts here." description="Share the first video and give this space some energy." action={<button className="primary-button" onClick={() => setPopup(user ? 'create' : 'auth')}>Create a video <Plus size={16} /></button>} />}</>}
 
         {view === 'boards' && <SavedLibrary {...feedActions} key={`${mode}:${user?.id || 'guest'}`} activeBoardId={boardId} section={librarySection} onSection={section => openLibrary(section)} onBoard={id => openLibrary('collections', id)} onCreate={() => setPopup(user ? 'board' : 'auth')} onExplore={() => navigate('explore')} /> }
 

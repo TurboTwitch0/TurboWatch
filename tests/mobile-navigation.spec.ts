@@ -117,3 +117,23 @@ test('opening navigation pauses a covered short and preserves a deliberate pause
   await page.keyboard.press('Escape');
   expect(await video.evaluate(element => (element as HTMLVideoElement).paused)).toBe(true);
 });
+
+test('arrow keys scroll the phone drawer without changing the short underneath it', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/?demo=1&view=shorts');
+  const video = page.locator('.short-player video');
+  await expect(video).toBeVisible();
+  const source = await video.getAttribute('src');
+
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'Navigation', exact: true });
+  await expect(drawer.getByRole('button', { name: 'Close navigation', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(video).toHaveAttribute('src', source!, { timeout: 1500 });
+  await expect.poll(() => drawer.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+  await page.keyboard.press('ArrowDown');
+  await expect(video).not.toHaveAttribute('src', source!);
+});
