@@ -275,7 +275,8 @@ export default function TurboWatch() {
     if (view !== 'shorts' || !shorts.length || shortCovered) return;
     const keyboard = (event: KeyboardEvent) => {
       const target = event.target;
-      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, video'))) return;
+      if (!(target instanceof HTMLElement) || (target !== document.body && !mainRef.current?.contains(target))) return;
+      if (target.isContentEditable || target.closest('input, textarea, select, video')) return;
       if (['ArrowDown', 'ArrowRight'].includes(event.key)) {
         event.preventDefault(); stepShort(1);
       } else if (['ArrowUp', 'ArrowLeft'].includes(event.key)) {

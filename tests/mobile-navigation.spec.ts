@@ -134,6 +134,35 @@ test('arrow keys scroll the phone drawer without changing the short underneath i
 
   await page.keyboard.press('Escape');
   await expect(drawer).toHaveCount(0);
+  await page.getByRole('button', { name: 'Next short', exact: true }).focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(video).not.toHaveAttribute('src', source!);
+});
+
+
+test('Shorts arrow keys leave Activity and other header controls in place', async ({ page }) => {
+  await page.goto('/?demo=1&view=shorts');
+  const video = page.locator('.short-player video');
+  await expect(video).toBeVisible();
+  const source = await video.getAttribute('src');
+  const activity = page.getByRole('button', { name: 'Activity', exact: true });
+  await activity.click();
+  const close = page.getByRole('button', { name: 'Close activity', exact: true });
+  await close.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(close).toBeFocused();
+  await expect(video).toHaveAttribute('src', source!);
+  await close.click();
+
+  for (const name of ['Activity', 'Create', 'Open navigation']) {
+    await page.getByRole('button', { name, exact: true }).focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(video).toHaveAttribute('src', source!);
+  }
+  await video.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(video).toHaveAttribute('src', source!);
+  await page.getByRole('button', { name: 'Next short', exact: true }).focus();
   await page.keyboard.press('ArrowDown');
   await expect(video).not.toHaveAttribute('src', source!);
 });
